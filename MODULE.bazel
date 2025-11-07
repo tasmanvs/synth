@@ -1,0 +1,9 @@
+module(
+    name = "tasman_bazel_testing",
+    version = "0.1.0",
+)
+
+# Bazel modules (bzlmod) is now enabled by default in Bazel 7+
+# Add external dependencies here using bazel_dep()
+
+bazel_dep(name = "abseil-cpp", version = "20240116.2")

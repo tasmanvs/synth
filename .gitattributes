@@ -1,0 +1,36 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Bazel files
+BUILD text eol=lf
+WORKSPACE text eol=lf
+MODULE.bazel text eol=lf
+*.bzl text eol=lf
+*.bazel text eol=lf
+.bazelrc text eol=lf
+.bazelversion text eol=lf
+
+# Source code
+*.cc text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.hpp text eol=lf
+*.c text eol=lf
+*.py text eol=lf
+*.sh text eol=lf
+
+# Windows scripts
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Lock files - keep LF
+*.lock text eol=lf
+
+# Binary files
+*.exe binary
+*.dll binary
+*.so binary
+*.a binary
+*.lib binary
+*.dylib binary
