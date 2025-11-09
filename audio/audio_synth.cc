@@ -1,4 +1,4 @@
-#include "audio_synth.h"
+#include "audio/audio_synth.h"
 #include "absl/log/log.h"
 #include <cmath>
 

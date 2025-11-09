@@ -2,8 +2,8 @@
 
 #include "imgui.h"
 #include "implot.h"
-#include "audio_synth.h"
-#include "audio_interface.h"
+#include "audio/audio_synth.h"
+#include "audio/audio_interface.h"
 #include <vector>
 
 class MainWindow {

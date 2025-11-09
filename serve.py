@@ -32,28 +32,30 @@ if __name__ == '__main__':
     
     # Change to the directory where the built files are
     if len(sys.argv) > 1:
-        os.chdir(sys.argv[1])
+        serve_dir = sys.argv[1]
     else:
-        # Default to bazel-bin if no argument provided
-        if os.path.exists('bazel-bin'):
-            os.chdir('bazel-bin')
+        # Try to find the apps directory in bazel-bin
+        if os.path.exists('bazel-bin/apps'):
+            serve_dir = 'bazel-bin/apps'
+        elif os.path.exists('bazel-bin'):
+            serve_dir = 'bazel-bin'
         else:
             print("Error: bazel-bin directory not found!")
-            print("Please run: bazelisk build //:imgui_webgl --platforms=@emsdk//:platform_wasm")
+            print("Please build a web application first:")
+            print("  bazelisk build //apps:imgui_webgl")
             sys.exit(1)
     
-    # Check if required files exist
-    if not os.path.exists('imgui_webgl.html'):
-        print("Error: imgui_webgl.html not found!")
-        print("Creating HTML file...")
-        # Create a minimal HTML file
-        html_content = '''<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>ImGui WebGL</title></head>
-<body><canvas id="canvas"></canvas>
-<script>var Module = {canvas: document.getElementById('canvas')};</script>
-<script src="imgui_webgl.js"></script></body></html>'''
-        with open('imgui_webgl.html', 'w') as f:
-            f.write(html_content)
+    os.chdir(serve_dir)
+    
+    # Check if required files exist and provide helpful message
+    html_files = [f for f in os.listdir('.') if f.endswith('.html')]
+    if not html_files:
+        print(f"Error: No HTML files found in {os.getcwd()}")
+        print("\nPlease build a web application first with the emscripten platform:")
+        print("  bazelisk build //apps:imgui_webgl --platforms=@emsdk//:platform_wasm")
+        print("  bazelisk build //apps:audio_webgl --platforms=@emsdk//:platform_wasm")
+        print("\nNote: Web apps require --platforms=@emsdk//:platform_wasm to compile to WebAssembly")
+        sys.exit(1)
     
     Handler = MyHTTPRequestHandler
     
@@ -67,8 +69,17 @@ if __name__ == '__main__':
         httpd = ThreadedTCPServer(("", PORT), Handler)
         print(f"Server running at http://localhost:{PORT}/")
         print(f"Serving from: {os.getcwd()}")
-        print(f"Open http://localhost:{PORT}/imgui_webgl.html in your browser")
-        print("Press Ctrl+C to stop")
+        
+        # List available HTML files
+        html_files = [f for f in os.listdir('.') if f.endswith('.html')]
+        if html_files:
+            print("\nAvailable applications:")
+            for html_file in html_files:
+                print(f"  http://localhost:{PORT}/{html_file}")
+        else:
+            print(f"Open http://localhost:{PORT}/imgui_webgl.html in your browser")
+        
+        print("\nPress Ctrl+C to stop")
         
         # Run server in a thread so Ctrl+C works immediately
         server_thread = threading.Thread(target=httpd.serve_forever)
