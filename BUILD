@@ -59,6 +59,7 @@ cc_binary(
         "@imgui//:imgui",
         ":imgui_glfw_opengl3_emscripten",
         ":main_window",
+        "@flac//:flac",
     ],
     linkopts = [
         "-sUSE_GLFW=3",
@@ -77,6 +78,14 @@ cc_binary(
         "--shell-file=$(location :shell.html)",
     ],
     data = [":shell.html"],
+)
+
+cc_binary(
+    name = "flac_test",
+    srcs = ["flac_test.cc"],
+    deps = [
+        "@flac//:flac",
+    ],
 )
 
 

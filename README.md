@@ -49,7 +49,14 @@ bazelisk build //:hello_world
 bazelisk run //:hello_world
 ```
 
-### 3. Build WebGL Application (Emscripten)
+### 3. Build FLAC Test
+
+```powershell
+bazelisk build //:flac_test
+bazelisk run //:flac_test
+```
+
+### 4. Build WebGL Application (Emscripten)
 
 ```powershell
 bazelisk build //:imgui_webgl --platforms=@emsdk//:platform_wasm
@@ -99,8 +106,10 @@ py -m http.server 8080
 ### External Dependencies (managed by Bazel)
 
 - **abseil-cpp** (20240116.2) - C++ utility library
-- **imgui** (1.92.2) - Immediate mode GUI library
+- **imgui** (1.91.8) - Immediate mode GUI library
+- **implot** (0.16) - Plotting library for ImGui
 - **emsdk** (3.1.56) - Emscripten SDK for WebAssembly
+- **flac** (1.5.0) - Free Lossless Audio Codec library
 
 ### System Requirements
 
@@ -125,7 +134,8 @@ This separation keeps the UI code modular and testable.
 |--------|-------------|----------|
 | `hello_world` | Abseil demo | Windows |
 | `imgui_hello` | ImGui DirectX 11 | Windows |
-| `imgui_webgl` | ImGui WebGL | Browser (WASM) |
+| `imgui_webgl` | ImGui + ImPlot WebGL | Browser (WASM) |
+| `flac_test` | FLAC library test | Windows |
 
 ## Features
 

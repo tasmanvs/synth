@@ -19,3 +19,12 @@ emsdk_emscripten_deps(emscripten_version = "3.1.56")
 
 load("@emsdk//:toolchains.bzl", "register_emscripten_toolchains")
 register_emscripten_toolchains()
+
+# FLAC audio codec library
+http_archive(
+    name = "flac",
+    sha256 = "aea54ed186ad07a34750399cb27fc216a2b62d0ffcd6dc2e3064a3518c3146f8",
+    strip_prefix = "flac-1.5.0",
+    url = "https://github.com/xiph/flac/archive/refs/tags/1.5.0.tar.gz",
+    build_file = "@//third_party:flac.BUILD",
+)
