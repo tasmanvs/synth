@@ -12,94 +12,151 @@ A demonstration project showing how to build and run ImGui applications with Baz
 
 ```
 bazel_testing/
-├── hello_world.cc          # Simple Abseil hello world
-├── imgui_dx11.cc           # ImGui with DirectX 11 (Windows native)
-├── imgui_webgl.cc          # ImGui with WebGL (Emscripten)
-├── main_window.h/cc        # Main UI window class
-├── backends/               # Local ImGui backend files
+├── apps/                   # Main application targets
+│   ├── BUILD
+│   └── imgui_webgl.cc      # ImGui WebGL application
+├── audio/                  # Audio synthesis and playback
+│   ├── BUILD
+│   ├── audio_synth.*       # Pure waveform generator
+│   ├── audio_interface.*   # OpenAL audio playback
+│   └── audio*.js           # Web Audio JavaScript
+├── ui/                     # UI components
+│   ├── BUILD
+│   ├── main_window.*       # Main UI window class
+│   └── implot_utils.*      # ImPlot utilities
+├── examples/               # Demo/example programs
+│   ├── BUILD
+│   ├── hello_world.cc      # Simple Abseil demo
+│   ├── imgui_dx11.cc       # ImGui DirectX 11 (Windows)
+│   └── flac_test.cc        # FLAC library test
+├── backends/               # ImGui backend implementations
 │   ├── imgui_impl_glfw.*
 │   └── imgui_impl_opengl3.*
+├── third_party/            # Third-party build configs
 ├── shell.html              # HTML template for WebGL
 ├── serve.py                # Python HTTP server
 ├── run_webgl.ps1           # Build and run script
-├── BUILD                   # Bazel build configuration
+├── BUILD                   # Root build file
 ├── MODULE.bazel            # Bazel module dependencies
-└── WORKSPACE               # Workspace configuration (Emscripten)
+└── WORKSPACE               # Workspace configuration
 ```
 
-## Building
+## Available Build Targets
 
-### 1. Build Native Windows Application (DirectX 11)
+### Build All Compatible Targets
 
 ```powershell
-bazelisk build //:imgui_hello
+# Build all targets compatible with your platform (Windows)
+bazelisk build //...
 ```
 
-**Run:**
+This builds all Windows-native targets and skips web/WASM targets automatically.
+
+---
+
+### Examples (Windows Native)
+
+#### 1. Hello World (Abseil Demo)
 ```powershell
-bazelisk run //:imgui_hello
-# Or directly:
-.\bazel-bin\imgui_hello.exe
+bazelisk build //examples:hello_world
+bazelisk run //examples:hello_world
 ```
+Simple demonstration of Abseil string utilities and logging.
 
-### 2. Build Hello World (Abseil example)
+#### 2. ImGui DirectX 11 (Windows)
+```powershell
+bazelisk build //examples:imgui_dx11
+bazelisk run //examples:imgui_dx11
+```
+Native Windows ImGui application using DirectX 11 renderer.
+
+#### 3. FLAC Library Test
+```powershell
+bazelisk build //examples:flac_test
+bazelisk run //examples:flac_test
+```
+Tests the FLAC audio codec library integration.
+
+---
+
+### Libraries
+
+#### Audio Synthesis Library
+```powershell
+bazelisk build //audio:audio_synth
+```
+Pure waveform generator library (no platform dependencies).
+
+---
+
+### Web Applications (Require Emscripten)
+
+#### ImGui WebGL Application
+```powershell
+bazelisk build //apps:imgui_webgl --platforms=@emsdk//:platform_wasm
+```
+Full ImGui + ImPlot application compiled to WebAssembly.
+
+**Output files:** (in `bazel-bin/apps/`)
+- `imgui_webgl.js` - JavaScript glue code (~443 KB)
+- `imgui_webgl.wasm` - WebAssembly binary (~4.2 MB)
+- Use with `shell.html` as the HTML launcher
+
+#### Audio WebGL Application
+```powershell
+bazelisk build //apps:audio_webgl --platforms=@emsdk//:platform_wasm
+```
+ImGui application with OpenAL audio support for the web.
+
+---
+
+### Web Targets Requiring OpenGL/GLFW (Emscripten only)
+
+#### ImGui OpenGL Demo
+```powershell
+bazelisk build //examples:imgui_hello --platforms=@emsdk//:platform_wasm
+```
+OpenGL-based ImGui demo (GLFW + OpenGL ES3).
+
+## Running WebGL Applications
+
+### Step 1: Build the Web Application
 
 ```powershell
-bazelisk build //:hello_world
-bazelisk run //:hello_world
+bazelisk build //apps:imgui_webgl --platforms=@emsdk//:platform_wasm
 ```
 
-### 3. Build FLAC Test
+### Step 2: Verify Output Files
+
+The build should generate (in `bazel-bin/apps/`):
+- `imgui_webgl.js` - JavaScript glue code
+- `imgui_webgl.wasm` - WebAssembly binary  
+- `imgui_webgl` - Main binary (uses shell.html via --shell-file)
+
+**Note:** If HTML is not generated, copy manually:
+```powershell
+Copy-Item shell.html bazel-bin\apps\imgui_webgl.html
+```
+
+### Step 3: Start the Web Server
 
 ```powershell
-bazelisk build //:flac_test
-bazelisk run //:flac_test
+python serve.py
 ```
 
-### 4. Build WebGL Application (Emscripten)
+The server will automatically:
+- Serve from `bazel-bin/apps/` (new structure)
+- List all available HTML files
+- Set proper CORS headers for WebAssembly
+- Open at http://localhost:8080/
 
-```powershell
-bazelisk build //:imgui_webgl --platforms=@emsdk//:platform_wasm
-```
-
-This generates:
-- `bazel-bin/imgui_webgl.js` - JavaScript glue code (~335 KB)
-- `bazel-bin/imgui_webgl.wasm` - WebAssembly binary (~2.1 MB)
-- `bazel-bin/imgui_webgl.html` - HTML launcher
-
-## Running the WebGL Application
-
-### Option 1: Use the Convenience Script (Recommended)
+### Alternative: Use the Convenience Script
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\run_webgl.ps1
 ```
 
-This will:
-1. Build the WebGL target
-2. Compress files with gzip
-3. Start an HTTP server
-4. Open your browser automatically
-
-### Option 2: Manual Method
-
-```powershell
-# Build first
-bazelisk build //:imgui_webgl --platforms=@emsdk//:platform_wasm
-
-# Start Python server
-py serve.py
-
-# Open browser to http://localhost:8080/imgui_webgl.html
-```
-
-### Option 3: Python Built-in Server
-
-```powershell
-cd bazel-bin
-py -m http.server 8080
-# Then navigate to http://localhost:8080/imgui_webgl.html
-```
+**Note:** This script may need updating for the new directory structure.
 
 ## Dependencies
 
@@ -128,14 +185,17 @@ The UI is organized using a `MainWindow` class with two methods:
 
 This separation keeps the UI code modular and testable.
 
-### Build Targets
+### Build Targets Summary
 
-| Target | Description | Platform |
-|--------|-------------|----------|
-| `hello_world` | Abseil demo | Windows |
-| `imgui_hello` | ImGui DirectX 11 | Windows |
-| `imgui_webgl` | ImGui + ImPlot WebGL | Browser (WASM) |
-| `flac_test` | FLAC library test | Windows |
+| Target | Description | Platform | Command |
+|--------|-------------|----------|---------|
+| `//examples:hello_world` | Abseil demo | Windows | `bazelisk build //examples:hello_world` |
+| `//examples:imgui_dx11` | ImGui DirectX 11 | Windows | `bazelisk build //examples:imgui_dx11` |
+| `//examples:flac_test` | FLAC library test | Windows | `bazelisk build //examples:flac_test` |
+| `//audio:audio_synth` | Audio synthesis lib | All | `bazelisk build //audio:audio_synth` |
+| `//apps:imgui_webgl` | ImGui + ImPlot WebGL | Browser (WASM) | `bazelisk build //apps:imgui_webgl --platforms=@emsdk//:platform_wasm` |
+| `//apps:audio_webgl` | ImGui + OpenAL WebGL | Browser (WASM) | `bazelisk build //apps:audio_webgl --platforms=@emsdk//:platform_wasm` |
+| `//examples:imgui_hello` | ImGui OpenGL demo | Browser (WASM) | `bazelisk build //examples:imgui_hello --platforms=@emsdk//:platform_wasm` |
 
 ## Features
 
@@ -194,27 +254,33 @@ bazelisk clean --expunge
 ### WebGL Not Loading
 
 1. Ensure you built with the correct platform flag: `--platforms=@emsdk//:platform_wasm`
-2. Check browser console for errors (F12)
-3. Verify files exist in `bazel-bin/`:
-   - `imgui_webgl.html`
-   - `imgui_webgl.js`
-   - `imgui_webgl.wasm`
+2. Verify files exist in `bazel-bin/apps/`:
+   - `imgui_webgl.js` (generated)
+   - `imgui_webgl.wasm` (generated)
+   - `imgui_webgl.html` (auto-generated or copy from shell.html)
+3. If HTML not present: `Copy-Item shell.html bazel-bin\apps\imgui_webgl.html`
+4. Check browser console for errors (F12)
+5. Ensure server has proper CORS headers (use serve.py)
 
 ## Performance
 
-- **Uncompressed WASM:** ~2.1 MB
-- **Gzip compressed:** ~500-600 KB (70% reduction)
-- **JavaScript:** ~335 KB uncompressed
+- **Uncompressed WASM:** ~4.2 MB (imgui_webgl)
+- **Gzip compressed:** ~800 KB - 1 MB (70-75% reduction)
+- **JavaScript:** ~443 KB uncompressed
 - **First load:** 2-5 seconds (depending on network)
 - **Subsequent loads:** Instant (browser cache)
+
+**Note:** File sizes may vary based on build configuration and included features.
 
 ## Development Tips
 
 ### Iterate Quickly
 
 ```powershell
-# Build and run in one command
-bazelisk build //:imgui_webgl --platforms=@emsdk//:platform_wasm && py serve.py
+# Build and serve web app in one command (if HTML not auto-generated)
+bazelisk build //apps:imgui_webgl --platforms=@emsdk//:platform_wasm
+if (-not (Test-Path bazel-bin\apps\imgui_webgl.html)) { Copy-Item shell.html bazel-bin\apps\imgui_webgl.html }
+python serve.py
 ```
 
 ### Watch for Changes
@@ -222,10 +288,10 @@ bazelisk build //:imgui_webgl --platforms=@emsdk//:platform_wasm && py serve.py
 Bazel automatically tracks dependencies. Just rebuild after changes:
 
 ```powershell
-bazelisk build //:imgui_webgl --platforms=@emsdk//:platform_wasm
+bazelisk build //apps:imgui_webgl --platforms=@emsdk//:platform_wasm
 ```
 
-The browser will use the updated files on refresh.
+The browser will use the updated files on refresh (Ctrl+F5 for hard refresh).
 
 ### Debug Build
 

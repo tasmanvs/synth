@@ -35,6 +35,7 @@ cc_binary(
         "//audio:audio.js",
     ],
     visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
 cc_binary(
@@ -68,4 +69,5 @@ cc_binary(
         "//:shell.html",
     ],
     visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//cpu:wasm32"],
 )

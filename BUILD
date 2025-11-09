@@ -18,6 +18,7 @@ cc_library(
     ],
     strip_include_prefix = "backends",
     visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
 # Export shell.html for web applications

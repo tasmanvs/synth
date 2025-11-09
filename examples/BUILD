@@ -12,16 +12,6 @@ cc_binary(
 )
 
 cc_binary(
-    name = "imgui_hello",
-    srcs = ["imgui_hello.cc"],
-    deps = [
-        "@imgui//:imgui",
-        "//:imgui_glfw_opengl3_emscripten",
-    ],
-    visibility = ["//visibility:public"],
-)
-
-cc_binary(
     name = "imgui_dx11",
     srcs = ["imgui_dx11.cc"],
     deps = [

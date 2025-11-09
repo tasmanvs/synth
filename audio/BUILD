@@ -16,6 +16,7 @@ cc_library(
         "@abseil-cpp//absl/log",
     ],
     visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
 exports_files([

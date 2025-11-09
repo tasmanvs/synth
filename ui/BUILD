@@ -11,6 +11,7 @@ cc_library(
         "@abseil-cpp//absl/log:check",
     ],
     visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
 cc_library(
