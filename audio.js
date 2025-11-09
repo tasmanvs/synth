@@ -14,6 +14,18 @@ var LibraryAudio = {
     
     js_update_tone: function(frequency, volume) {
         AudioSynth.updateTone(frequency, volume);
+    },
+    
+    js_play_buffer: function(bufferPtr, length, sampleRate, volume) {
+        AudioSynth.playBuffer(bufferPtr, length, sampleRate, volume);
+    },
+    
+    js_stop_buffer: function() {
+        AudioSynth.stopBuffer();
+    },
+    
+    js_update_buffer_volume: function(volume) {
+        AudioSynth.updateBufferVolume(volume);
     }
 };
 
