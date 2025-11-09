@@ -47,12 +47,19 @@ if __name__ == '__main__':
     
     Handler = MyHTTPRequestHandler
     
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        print(f"Server running at http://localhost:{PORT}/")
-        print(f"Serving from: {os.getcwd()}")
-        print(f"Open http://localhost:{PORT}/imgui_webgl.html in your browser")
-        print("Press Ctrl+C to stop")
-        try:
+    try:
+        with socketserver.TCPServer(("", PORT), Handler) as httpd:
+            print(f"Server running at http://localhost:{PORT}/")
+            print(f"Serving from: {os.getcwd()}")
+            print(f"Open http://localhost:{PORT}/imgui_webgl.html in your browser")
+            print("Press Ctrl+C to stop")
             httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\nServer stopped")
+    except KeyboardInterrupt:
+        print("\nServer stopped")
+    except OSError as e:
+        if e.errno == 10048 or e.errno == 10013:
+            print(f"\nError: Port {PORT} is already in use.")
+            print("Either another server is running, or try a different port.")
+        else:
+            print(f"\nError: {e}")
+        sys.exit(1)
