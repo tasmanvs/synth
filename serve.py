@@ -3,6 +3,7 @@ import http.server
 import socketserver
 import os
 import sys
+import threading
 
 PORT = 8080
 
@@ -20,6 +21,15 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         return mimetype
 
 if __name__ == '__main__':
+    import signal
+    
+    # Set up signal handler for clean shutdown
+    def signal_handler(sig, frame):
+        print("\n\nServer stopped by user")
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    
     # Change to the directory where the built files are
     if len(sys.argv) > 1:
         os.chdir(sys.argv[1])
@@ -47,15 +57,30 @@ if __name__ == '__main__':
     
     Handler = MyHTTPRequestHandler
     
+    # Use ThreadingTCPServer for better Ctrl+C handling
+    class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+    
+    httpd = None
     try:
-        with socketserver.TCPServer(("", PORT), Handler) as httpd:
-            print(f"Server running at http://localhost:{PORT}/")
-            print(f"Serving from: {os.getcwd()}")
-            print(f"Open http://localhost:{PORT}/imgui_webgl.html in your browser")
-            print("Press Ctrl+C to stop")
-            httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\nServer stopped")
+        httpd = ThreadedTCPServer(("", PORT), Handler)
+        print(f"Server running at http://localhost:{PORT}/")
+        print(f"Serving from: {os.getcwd()}")
+        print(f"Open http://localhost:{PORT}/imgui_webgl.html in your browser")
+        print("Press Ctrl+C to stop")
+        
+        # Run server in a thread so Ctrl+C works immediately
+        server_thread = threading.Thread(target=httpd.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+        
+        # Keep main thread alive and wait for Ctrl+C
+        try:
+            while True:
+                threading.Event().wait(1)
+        except KeyboardInterrupt:
+            print("\n\nShutting down server...")
     except OSError as e:
         if e.errno == 10048 or e.errno == 10013:
             print(f"\nError: Port {PORT} is already in use.")
@@ -63,3 +88,10 @@ if __name__ == '__main__':
         else:
             print(f"\nError: {e}")
         sys.exit(1)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if httpd:
+            httpd.shutdown()
+            httpd.server_close()
+        print("Server stopped")
