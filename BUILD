@@ -59,7 +59,6 @@ cc_binary(
         "@imgui//:imgui",
         ":imgui_glfw_opengl3_emscripten",
         ":main_window",
-        "@flac//:flac",
     ],
     linkopts = [
         "-sUSE_GLFW=3",
@@ -76,8 +75,16 @@ cc_binary(
         "-sASSERTIONS=1",
         # Use custom shell file
         "--shell-file=$(location :shell.html)",
+        # Include pre-loaded JavaScript for Web Audio
+        "--pre-js=$(location :audio_pre.js)",
+        # Include JavaScript library for Web Audio
+        "--js-library=$(location :audio.js)",
     ],
-    data = [":shell.html"],
+    data = [
+        ":shell.html",
+        ":audio_pre.js",
+        ":audio.js",
+    ],
 )
 
 cc_binary(
