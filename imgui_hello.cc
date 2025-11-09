@@ -4,7 +4,7 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 
-static void glfw_error_callback(int error, const char* description)
+static void GlfwErrorCallback(int error, const char* description)
 {
     std::cerr << "GLFW Error " << error << ": " << description << std::endl;
 }
@@ -12,7 +12,7 @@ static void glfw_error_callback(int error, const char* description)
 int main(int, char**)
 {
     // Setup window
-    glfwSetErrorCallback(glfw_error_callback);
+    glfwSetErrorCallback(GlfwErrorCallback);
     if (!glfwInit())
         return 1;
 

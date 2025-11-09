@@ -1,5 +1,4 @@
-#ifndef AUDIO_INTERFACE_H
-#define AUDIO_INTERFACE_H
+#pragma once
 
 #include <vector>
 
@@ -39,5 +38,3 @@ private:
     bool m_isPlaying;
     std::vector<short> m_currentSamples;  // Store current buffer for visualization
 };
-
-#endif // AUDIO_INTERFACE_H

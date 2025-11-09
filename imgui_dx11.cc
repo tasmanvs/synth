@@ -5,19 +5,19 @@
 #include <tchar.h>
 
 // Data
-static ID3D11Device*            g_pd3dDevice = nullptr;
-static ID3D11DeviceContext*     g_pd3dDeviceContext = nullptr;
-static IDXGISwapChain*          g_pSwapChain = nullptr;
-static bool                     g_SwapChainOccluded = false;
-static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
-static ID3D11RenderTargetView*  g_mainRenderTargetView = nullptr;
+static ID3D11Device*            g_pd3d_device = nullptr;
+static ID3D11DeviceContext*     g_pd3d_device_context = nullptr;
+static IDXGISwapChain*          g_p_swap_chain = nullptr;
+static bool                     g_swap_chain_occluded = false;
+static UINT                     g_resize_width = 0, g_resize_height = 0;
+static ID3D11RenderTargetView*  g_main_render_target_view = nullptr;
 
 // Forward declarations
-bool CreateDeviceD3D(HWND hWnd);
+bool CreateDeviceD3D(HWND h_wnd);
 void CleanupDeviceD3D();
 void CreateRenderTarget();
 void CleanupRenderTarget();
-LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+LRESULT WINAPI WndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param);
 
 // Main code
 int main(int, char**)
@@ -25,10 +25,10 @@ int main(int, char**)
     // Create application window
     WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
     ::RegisterClassExW(&wc);
-    HWND hwnd = ::CreateWindowW(wc.lpszClassName, L"Dear ImGui - Bazel + DirectX11 Hello World", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 720, nullptr, nullptr, wc.hInstance, nullptr);
+    HWND h_wnd = ::CreateWindowW(wc.lpszClassName, L"Dear ImGui - Bazel + DirectX11 Hello World", WS_OVERLAPPEDWINDOW, 100, 100, 1280, 720, nullptr, nullptr, wc.hInstance, nullptr);
 
     // Initialize Direct3D
-    if (!CreateDeviceD3D(hwnd))
+    if (!CreateDeviceD3D(h_wnd))
     {
         CleanupDeviceD3D();
         ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
@@ -36,8 +36,8 @@ int main(int, char**)
     }
 
     // Show the window
-    ::ShowWindow(hwnd, SW_SHOWDEFAULT);
-    ::UpdateWindow(hwnd);
+    ::ShowWindow(h_wnd, SW_SHOWDEFAULT);
+    ::UpdateWindow(h_wnd);
 
     // Setup Dear ImGui context
     IMGUI_CHECKVERSION();
@@ -49,8 +49,8 @@ int main(int, char**)
     ImGui::StyleColorsDark();
 
     // Setup Platform/Renderer backends
-    ImGui_ImplWin32_Init(hwnd);
-    ImGui_ImplDX11_Init(g_pd3dDevice, g_pd3dDeviceContext);
+    ImGui_ImplWin32_Init(h_wnd);
+    ImGui_ImplDX11_Init(g_pd3d_device, g_pd3d_device_context);
 
     // Our state
     bool show_demo_window = true;
@@ -74,19 +74,19 @@ int main(int, char**)
             break;
 
         // Handle window screen locked
-        if (g_SwapChainOccluded && g_pSwapChain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED)
+        if (g_swap_chain_occluded && g_p_swap_chain->Present(0, DXGI_PRESENT_TEST) == DXGI_STATUS_OCCLUDED)
         {
             ::Sleep(10);
             continue;
         }
-        g_SwapChainOccluded = false;
+        g_swap_chain_occluded = false;
 
         // Handle window resize
-        if (g_ResizeWidth != 0 && g_ResizeHeight != 0)
+        if (g_resize_width != 0 && g_resize_height != 0)
         {
             CleanupRenderTarget();
-            g_pSwapChain->ResizeBuffers(0, g_ResizeWidth, g_ResizeHeight, DXGI_FORMAT_UNKNOWN, 0);
-            g_ResizeWidth = g_ResizeHeight = 0;
+            g_p_swap_chain->ResizeBuffers(0, g_resize_width, g_resize_height, DXGI_FORMAT_UNKNOWN, 0);
+            g_resize_width = g_resize_height = 0;
             CreateRenderTarget();
         }
 
@@ -136,13 +136,13 @@ int main(int, char**)
         // Rendering
         ImGui::Render();
         const float clear_color_with_alpha[4] = { clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w };
-        g_pd3dDeviceContext->OMSetRenderTargets(1, &g_mainRenderTargetView, nullptr);
-        g_pd3dDeviceContext->ClearRenderTargetView(g_mainRenderTargetView, clear_color_with_alpha);
+        g_pd3d_device_context->OMSetRenderTargets(1, &g_main_render_target_view, nullptr);
+        g_pd3d_device_context->ClearRenderTargetView(g_main_render_target_view, clear_color_with_alpha);
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
 
         // Present
-        HRESULT hr = g_pSwapChain->Present(1, 0);
-        g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
+        HRESULT hr = g_p_swap_chain->Present(1, 0);
+        g_swap_chain_occluded = (hr == DXGI_STATUS_OCCLUDED);
     }
 
     // Cleanup
@@ -151,14 +151,14 @@ int main(int, char**)
     ImGui::DestroyContext();
 
     CleanupDeviceD3D();
-    ::DestroyWindow(hwnd);
+    ::DestroyWindow(h_wnd);
     ::UnregisterClassW(wc.lpszClassName, wc.hInstance);
 
     return 0;
 }
 
 // Helper functions
-bool CreateDeviceD3D(HWND hWnd)
+bool CreateDeviceD3D(HWND h_wnd)
 {
     // Setup swap chain
     DXGI_SWAP_CHAIN_DESC sd;
@@ -171,16 +171,16 @@ bool CreateDeviceD3D(HWND hWnd)
     sd.BufferDesc.RefreshRate.Denominator = 1;
     sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
     sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.OutputWindow = hWnd;
+    sd.OutputWindow = h_wnd;
     sd.SampleDesc.Count = 1;
     sd.SampleDesc.Quality = 0;
     sd.Windowed = TRUE;
     sd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
 
-    UINT createDeviceFlags = 0;
-    D3D_FEATURE_LEVEL featureLevel;
-    const D3D_FEATURE_LEVEL featureLevelArray[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
-    HRESULT res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, createDeviceFlags, featureLevelArray, 2, D3D11_SDK_VERSION, &sd, &g_pSwapChain, &g_pd3dDevice, &featureLevel, &g_pd3dDeviceContext);
+    UINT create_device_flags = 0;
+    D3D_FEATURE_LEVEL feature_level;
+    const D3D_FEATURE_LEVEL feature_level_array[2] = { D3D_FEATURE_LEVEL_11_0, D3D_FEATURE_LEVEL_10_0, };
+    HRESULT res = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, create_device_flags, feature_level_array, 2, D3D11_SDK_VERSION, &sd, &g_p_swap_chain, &g_pd3d_device, &feature_level, &g_pd3d_device_context);
     if (res != S_OK)
         return false;
 
@@ -191,48 +191,48 @@ bool CreateDeviceD3D(HWND hWnd)
 void CleanupDeviceD3D()
 {
     CleanupRenderTarget();
-    if (g_pSwapChain) { g_pSwapChain->Release(); g_pSwapChain = nullptr; }
-    if (g_pd3dDeviceContext) { g_pd3dDeviceContext->Release(); g_pd3dDeviceContext = nullptr; }
-    if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = nullptr; }
+    if (g_p_swap_chain) { g_p_swap_chain->Release(); g_p_swap_chain = nullptr; }
+    if (g_pd3d_device_context) { g_pd3d_device_context->Release(); g_pd3d_device_context = nullptr; }
+    if (g_pd3d_device) { g_pd3d_device->Release(); g_pd3d_device = nullptr; }
 }
 
 void CreateRenderTarget()
 {
-    ID3D11Texture2D* pBackBuffer;
-    g_pSwapChain->GetBuffer(0, IID_PPV_ARGS(&pBackBuffer));
-    g_pd3dDevice->CreateRenderTargetView(pBackBuffer, nullptr, &g_mainRenderTargetView);
-    pBackBuffer->Release();
+    ID3D11Texture2D* p_back_buffer;
+    g_p_swap_chain->GetBuffer(0, IID_PPV_ARGS(&p_back_buffer));
+    g_pd3d_device->CreateRenderTargetView(p_back_buffer, nullptr, &g_main_render_target_view);
+    p_back_buffer->Release();
 }
 
 void CleanupRenderTarget()
 {
-    if (g_mainRenderTargetView) { g_mainRenderTargetView->Release(); g_mainRenderTargetView = nullptr; }
+    if (g_main_render_target_view) { g_main_render_target_view->Release(); g_main_render_target_view = nullptr; }
 }
 
 // Forward declare message handler from imgui_impl_win32.cpp
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
 // Win32 message handler
-LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
+LRESULT WINAPI WndProc(HWND h_wnd, UINT msg, WPARAM w_param, LPARAM l_param)
 {
-    if (ImGui_ImplWin32_WndProcHandler(hWnd, msg, wParam, lParam))
+    if (ImGui_ImplWin32_WndProcHandler(h_wnd, msg, w_param, l_param))
         return true;
 
     switch (msg)
     {
     case WM_SIZE:
-        if (wParam == SIZE_MINIMIZED)
+        if (w_param == SIZE_MINIMIZED)
             return 0;
-        g_ResizeWidth = (UINT)LOWORD(lParam);
-        g_ResizeHeight = (UINT)HIWORD(lParam);
+        g_resize_width = (UINT)LOWORD(l_param);
+        g_resize_height = (UINT)HIWORD(l_param);
         return 0;
     case WM_SYSCOMMAND:
-        if ((wParam & 0xfff0) == SC_KEYMENU)
+        if ((w_param & 0xfff0) == SC_KEYMENU)
             return 0;
         break;
     case WM_DESTROY:
         ::PostQuitMessage(0);
         return 0;
     }
-    return ::DefWindowProcW(hWnd, msg, wParam, lParam);
+    return ::DefWindowProcW(h_wnd, msg, w_param, l_param);
 }

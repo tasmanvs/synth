@@ -1,5 +1,4 @@
-#ifndef AUDIO_SYNTH_H
-#define AUDIO_SYNTH_H
+#pragma once
 
 #include <vector>
 
@@ -18,5 +17,3 @@ public:
     std::vector<short> generateSineWaveCycle(float frequency, int sampleRate, 
                                             float volume);
 };
-
-#endif // AUDIO_SYNTH_H

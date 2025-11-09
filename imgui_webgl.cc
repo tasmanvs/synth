@@ -12,10 +12,10 @@
 #include <stdio.h>
 
 // Emscripten requires a global loop function
-GLFWwindow* g_Window = nullptr;
-MainWindow* g_MainWindow = nullptr;
+GLFWwindow* g_window = nullptr;
+MainWindow* g_main_window = nullptr;
 
-void main_loop()
+void MainLoop()
 {
     // Poll and handle events
     glfwPollEvents();
@@ -26,18 +26,18 @@ void main_loop()
     ImGui::NewFrame();
 
     // Update and draw main window
-    g_MainWindow->Update();
-    g_MainWindow->Draw();
+    g_main_window->Update();
+    g_main_window->Draw();
 
     // Rendering
     ImGui::Render();
     int display_w, display_h;
-    glfwGetFramebufferSize(g_Window, &display_w, &display_h);
+    glfwGetFramebufferSize(g_window, &display_w, &display_h);
     glViewport(0, 0, display_w, display_h);
     glClearColor(0.45f, 0.55f, 0.60f, 1.00f);
     glClear(GL_COLOR_BUFFER_BIT);
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    glfwSwapBuffers(g_Window);
+    glfwSwapBuffers(g_window);
 }
 
 int main(int argc, char** argv)
@@ -66,15 +66,15 @@ int main(int argc, char** argv)
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
 
     // Create window with graphics context
-    g_Window = glfwCreateWindow(1280, 720, "Dear ImGui - Bazel + Emscripten + WebGL", nullptr, nullptr);
-    if (g_Window == nullptr)
+    g_window = glfwCreateWindow(1280, 720, "Dear ImGui - Bazel + Emscripten + WebGL", nullptr, nullptr);
+    if (g_window == nullptr)
     {
         LOG(ERROR) << "Failed to create GLFW window";
         printf("Failed to create GLFW window\n");
         return -1;
     }
     LOG(INFO) << "GLFW window created (1280x720)";
-    glfwMakeContextCurrent(g_Window);
+    glfwMakeContextCurrent(g_window);
     glfwSwapInterval(1); // Enable vsync
 
     // Setup Dear ImGui context
@@ -88,25 +88,25 @@ int main(int argc, char** argv)
     ImGui::StyleColorsDark();
 
     // Setup Platform/Renderer backends
-    ImGui_ImplGlfw_InitForOpenGL(g_Window, true);
+    ImGui_ImplGlfw_InitForOpenGL(g_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
     LOG(INFO) << "ImGui platform/renderer backends initialized";
 
     // Create main window
-    g_MainWindow = new MainWindow();
+    g_main_window = new MainWindow();
     LOG(INFO) << "MainWindow created, starting main loop";
 
     // This function call won't return, and will engage in an infinite loop
-    emscripten_set_main_loop(main_loop, 0, true);
+    emscripten_set_main_loop(MainLoop, 0, true);
 
     // Cleanup (this will never be reached in Emscripten)
-    delete g_MainWindow;
+    delete g_main_window;
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
-    glfwDestroyWindow(g_Window);
+    glfwDestroyWindow(g_window);
     glfwTerminate();
 
     return 0;

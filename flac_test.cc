@@ -8,8 +8,8 @@ int main() {
     printf("FLAC Vendor String: %s\n", FLAC__VENDOR_STRING);
     
     // Create a simple encoder to test the library
-    FLAC__StreamEncoder *encoder = FLAC__stream_encoder_new();
-    if (encoder) {
+    FLAC__StreamEncoder* encoder = FLAC__stream_encoder_new();
+    if (encoder != nullptr) {
         printf("Successfully created FLAC encoder!\n");
         
         // Check some capabilities

@@ -10,3 +10,4 @@ Constants should be kPascalCase
 Namespaces should be snake_case
 Use `#pragma once` in header files instead of include guards.
 Use `nullptr` instead of `NULL` or `0` for pointers.
+Avoid using abbreviations in names where reasonable.

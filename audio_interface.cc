@@ -83,7 +83,7 @@ bool AudioInterface::init() {
     return true;
 }
 
-void AudioInterface::playSamples(const std::vector<short>& samples, int sampleRate, bool looping) {
+void AudioInterface::playSamples(const std::vector<short>& samples, int sample_rate, bool looping) {
     if (!init()) {
         return;
     }
@@ -108,7 +108,7 @@ void AudioInterface::playSamples(const std::vector<short>& samples, int sampleRa
     
     // Fill buffer with sample data
     alBufferData(m_buffer, AL_FORMAT_MONO16, samples.data(), 
-                 samples.size() * sizeof(short), sampleRate);
+                 samples.size() * sizeof(short), sample_rate);
     error = alGetError();
     if (error != AL_NO_ERROR) {
         LOG(ERROR) << "Failed to fill audio buffer: " << error;
@@ -121,7 +121,7 @@ void AudioInterface::playSamples(const std::vector<short>& samples, int sampleRa
     // Attach buffer to source
     alSourcei(m_source, AL_BUFFER, m_buffer);
     
-    LOG(INFO) << "Loaded " << samples.size() << " samples at " << sampleRate << " Hz";
+    LOG(INFO) << "Loaded " << samples.size() << " samples at " << sample_rate << " Hz";
 }
 
 void AudioInterface::play() {
