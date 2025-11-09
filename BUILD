@@ -49,6 +49,7 @@ cc_library(
     deps = [
         "@imgui//:imgui",
         "@implot//:implot",
+        ":audio_synth",
     ],
 )
 
@@ -92,6 +93,44 @@ cc_binary(
     srcs = ["flac_test.cc"],
     deps = [
         "@flac//:flac",
+    ],
+)
+
+cc_library(
+    name = "audio_synth",
+    srcs = ["audio_synth.cc"],
+    hdrs = ["audio_synth.h"],
+)
+
+cc_binary(
+    name = "audio_webgl",
+    srcs = ["imgui_webgl.cc"],
+    deps = [
+        "@imgui//:imgui",
+        ":imgui_glfw_opengl3_emscripten",
+        ":main_window",
+        ":audio_synth",
+    ],
+    linkopts = [
+        "-sUSE_GLFW=3",
+        "-sUSE_WEBGL2=1",
+        "-sALLOW_MEMORY_GROWTH=1",
+        "-sFULL_ES3=1",
+        "-sWASM=1",
+        # OpenAL support (mandatory for proper OpenAL usage)
+        "-lopenal",
+        # Enable exceptions for better error handling
+        "-fexceptions",
+        "-sDISABLE_EXCEPTION_CATCHING=0",
+        # Optimize for size with compression in mind
+        "-sMALLOC=emmalloc",
+        # Provide better error messages
+        "-sASSERTIONS=1",
+        # Use custom shell file
+        "--shell-file=$(location :shell.html)",
+    ],
+    data = [
+        ":shell.html",
     ],
 )
 

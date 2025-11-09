@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 #include "implot.h"
+#include "audio_synth.h"
 #include <vector>
 
 class MainWindow {
@@ -29,4 +30,5 @@ private:
     double phase_;
     int sample_rate_;
     std::vector<float> audio_buffer_;
+    AudioSynth audio_synth_;
 };

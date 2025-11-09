@@ -1,18 +1,9 @@
 #include "main_window.h"
 #include <cmath>
-#include <emscripten.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
-
-// Declare JavaScript functions
-extern "C" {
-    void js_init_audio();
-    void js_start_tone(float frequency, float volume);
-    void js_stop_tone();
-    void js_update_tone(float frequency, float volume);
-}
 
 MainWindow::MainWindow()
     : show_demo_window_(true)
@@ -51,7 +42,7 @@ void MainWindow::Update()
 {
     GenerateAudioSamples();
     
-    // Update Web Audio API
+    // Update OpenAL audio
     static bool was_playing = false;
     static float last_frequency = 0.0f;
     static float last_volume = 0.0f;
@@ -60,11 +51,11 @@ void MainWindow::Update()
     {
         if (playing_)
         {
-            js_start_tone(frequency_, volume_);
+            audio_synth_.startTone(frequency_, volume_);
         }
         else
         {
-            js_stop_tone();
+            audio_synth_.stopTone();
         }
         was_playing = playing_;
         last_frequency = frequency_;
@@ -72,7 +63,7 @@ void MainWindow::Update()
     }
     else if (playing_ && (frequency_ != last_frequency || volume_ != last_volume))
     {
-        js_update_tone(frequency_, volume_);
+        audio_synth_.updateTone(frequency_, volume_);
         last_frequency = frequency_;
         last_volume = volume_;
     }
