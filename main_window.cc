@@ -1,5 +1,7 @@
 #include "main_window.h"
 #include <cmath>
+#include "absl/log/log.h"
+#include "absl/log/check.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -19,6 +21,7 @@ MainWindow::MainWindow()
     , sample_rate_(44100)
 {
     audio_buffer_.resize(1024);
+    LOG(INFO) << "MainWindow initialized with sample rate: " << sample_rate_;
 }
 
 MainWindow::~MainWindow()
@@ -28,6 +31,8 @@ MainWindow::~MainWindow()
 void MainWindow::GenerateAudioSamples()
 {
     if (!playing_) return;
+    
+    CHECK_GT(sample_rate_, 0) << "Sample rate must be positive";
     
     for (size_t i = 0; i < audio_buffer_.size(); ++i)
     {
@@ -51,10 +56,12 @@ void MainWindow::Update()
     {
         if (playing_)
         {
+            LOG(INFO) << "Starting audio tone at " << frequency_ << " Hz, volume " << volume_;
             audio_synth_.startTone(frequency_, volume_);
         }
         else
         {
+            LOG(INFO) << "Stopping audio tone";
             audio_synth_.stopTone();
         }
         was_playing = playing_;
@@ -63,6 +70,7 @@ void MainWindow::Update()
     }
     else if (playing_ && (frequency_ != last_frequency || volume_ != last_volume))
     {
+        LOG(INFO) << "Updating tone: frequency=" << frequency_ << " Hz, volume=" << volume_;
         audio_synth_.updateTone(frequency_, volume_);
         last_frequency = frequency_;
         last_volume = volume_;

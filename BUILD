@@ -4,6 +4,9 @@ cc_binary(
     deps = [
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:globals",
+        "@abseil-cpp//absl/log:initialize",
     ],
 )
 
@@ -50,6 +53,8 @@ cc_library(
         "@imgui//:imgui",
         "@implot//:implot",
         ":audio_synth",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
     ],
 )
 
@@ -60,6 +65,9 @@ cc_binary(
         "@imgui//:imgui",
         ":imgui_glfw_opengl3_emscripten",
         ":main_window",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:globals",
+        "@abseil-cpp//absl/log:initialize",
     ],
     linkopts = [
         "-sUSE_GLFW=3",

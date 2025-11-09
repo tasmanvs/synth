@@ -3,6 +3,9 @@
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "main_window.h"
+#include "absl/log/globals.h"
+#include "absl/log/initialize.h"
+#include "absl/log/log.h"
 #include <GLFW/glfw3.h>
 #include <emscripten.h>
 #include <emscripten/html5.h>
@@ -37,14 +40,24 @@ void main_loop()
     glfwSwapBuffers(g_Window);
 }
 
-int main(int, char**)
+int main(int argc, char** argv)
 {
+    // Initialize Abseil logging
+    absl::InitializeLog();
+    
+    // Set stderr threshold to INFO so logs appear in browser console
+    absl::SetStderrThreshold(absl::LogSeverity::kInfo);
+    
+    LOG(INFO) << "Starting ImGui WebGL application";
+    
     // Setup GLFW
     if (!glfwInit())
     {
+        LOG(ERROR) << "Failed to initialize GLFW";
         printf("Failed to initialize GLFW\n");
         return -1;
     }
+    LOG(INFO) << "GLFW initialized successfully";
 
     // For the browser using Emscripten, we are going to use WebGL2 with GL ES3
     const char* glsl_version = "#version 300 es";
@@ -56,9 +69,11 @@ int main(int, char**)
     g_Window = glfwCreateWindow(1280, 720, "Dear ImGui - Bazel + Emscripten + WebGL", nullptr, nullptr);
     if (g_Window == nullptr)
     {
+        LOG(ERROR) << "Failed to create GLFW window";
         printf("Failed to create GLFW window\n");
         return -1;
     }
+    LOG(INFO) << "GLFW window created (1280x720)";
     glfwMakeContextCurrent(g_Window);
     glfwSwapInterval(1); // Enable vsync
 
@@ -75,9 +90,11 @@ int main(int, char**)
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForOpenGL(g_Window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
+    LOG(INFO) << "ImGui platform/renderer backends initialized";
 
     // Create main window
     g_MainWindow = new MainWindow();
+    LOG(INFO) << "MainWindow created, starting main loop";
 
     // This function call won't return, and will engage in an infinite loop
     emscripten_set_main_loop(main_loop, 0, true);
