@@ -1,35 +1,22 @@
 #ifndef AUDIO_SYNTH_H
 #define AUDIO_SYNTH_H
 
+#include <vector>
+
+// Pure waveform generator - handles synthesis only, no playback
 class AudioSynth {
 public:
     AudioSynth();
     ~AudioSynth();
     
-    // Initialize OpenAL context and device
-    bool init();
+    // Generate a sine wave with given parameters
+    // Returns mono 16-bit samples
+    std::vector<short> generateSineWave(float frequency, float duration, 
+                                        int sampleRate, float volume);
     
-    // Start playing a tone at the given frequency and volume
-    void startTone(float frequency, float volume);
-    
-    // Stop playing the current tone
-    void stopTone();
-    
-    // Update the current tone's frequency and volume
-    void updateTone(float frequency, float volume);
-    
-    // Check if a tone is currently playing
-    bool isPlaying() const { return m_isPlaying; }
-    
-private:
-    void* m_device;      // ALCdevice*
-    void* m_context;     // ALCcontext*
-    unsigned int m_source;    // ALuint
-    unsigned int m_buffer;    // ALuint
-    bool m_isPlaying;
-    
-    // Generate a sine wave buffer
-    void generateSineWave(float frequency, float duration, int sampleRate);
+    // Generate a single cycle of a sine wave (for looping)
+    std::vector<short> generateSineWaveCycle(float frequency, int sampleRate, 
+                                            float volume);
 };
 
 #endif // AUDIO_SYNTH_H

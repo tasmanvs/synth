@@ -53,6 +53,7 @@ cc_library(
         "@imgui//:imgui",
         "@implot//:implot",
         ":audio_synth",
+        ":audio_interface",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
     ],
@@ -108,6 +109,18 @@ cc_library(
     name = "audio_synth",
     srcs = ["audio_synth.cc"],
     hdrs = ["audio_synth.h"],
+    deps = [
+        "@abseil-cpp//absl/log",
+    ],
+)
+
+cc_library(
+    name = "audio_interface",
+    srcs = ["audio_interface.cc"],
+    hdrs = ["audio_interface.h"],
+    deps = [
+        "@abseil-cpp//absl/log",
+    ],
 )
 
 cc_binary(

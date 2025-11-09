@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "implot.h"
 #include "audio_synth.h"
+#include "audio_interface.h"
 #include <vector>
 
 class MainWindow {
@@ -14,8 +15,6 @@ public:
     void Draw();
 
 private:
-    void GenerateAudioSamples();
-
     bool show_demo_window_;
     bool show_implot_demo_window_;
     bool show_another_window_;
@@ -27,8 +26,9 @@ private:
     float frequency_;
     float volume_;
     bool playing_;
-    double phase_;
     int sample_rate_;
-    std::vector<float> audio_buffer_;
-    AudioSynth audio_synth_;
+    
+    // Audio components
+    AudioSynth audio_synth_;          // Generates waveforms
+    AudioInterface audio_interface_;   // Handles playback
 };

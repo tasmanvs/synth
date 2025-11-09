@@ -17,10 +17,8 @@ MainWindow::MainWindow()
     , frequency_(440.0f)
     , volume_(0.3f)
     , playing_(false)
-    , phase_(0.0)
     , sample_rate_(44100)
 {
-    audio_buffer_.resize(1024);
     LOG(INFO) << "MainWindow initialized with sample rate: " << sample_rate_;
 }
 
@@ -28,26 +26,10 @@ MainWindow::~MainWindow()
 {
 }
 
-void MainWindow::GenerateAudioSamples()
-{
-    if (!playing_) return;
-    
-    CHECK_GT(sample_rate_, 0) << "Sample rate must be positive";
-    
-    for (size_t i = 0; i < audio_buffer_.size(); ++i)
-    {
-        audio_buffer_[i] = volume_ * std::sin(2.0 * M_PI * frequency_ * phase_);
-        phase_ += 1.0 / sample_rate_;
-        if (phase_ >= 1.0)
-            phase_ -= 1.0;
-    }
-}
 
 void MainWindow::Update()
 {
-    GenerateAudioSamples();
-    
-    // Update OpenAL audio
+    // Update audio playback
     static bool was_playing = false;
     static float last_frequency = 0.0f;
     static float last_volume = 0.0f;
@@ -57,12 +39,18 @@ void MainWindow::Update()
         if (playing_)
         {
             LOG(INFO) << "Starting audio tone at " << frequency_ << " Hz, volume " << volume_;
-            audio_synth_.startTone(frequency_, volume_);
+            
+            // Generate waveform using synth
+            auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
+            
+            // Play using audio interface
+            audio_interface_.playSamples(samples, sample_rate_, true);
+            audio_interface_.play();
         }
         else
         {
             LOG(INFO) << "Stopping audio tone";
-            audio_synth_.stopTone();
+            audio_interface_.stop();
         }
         was_playing = playing_;
         last_frequency = frequency_;
@@ -71,7 +59,17 @@ void MainWindow::Update()
     else if (playing_ && (frequency_ != last_frequency || volume_ != last_volume))
     {
         LOG(INFO) << "Updating tone: frequency=" << frequency_ << " Hz, volume=" << volume_;
-        audio_synth_.updateTone(frequency_, volume_);
+        
+        // Stop current playback
+        audio_interface_.stop();
+        
+        // Generate new waveform
+        auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
+        
+        // Play new waveform
+        audio_interface_.playSamples(samples, sample_rate_, true);
+        audio_interface_.play();
+        
         last_frequency = frequency_;
         last_volume = volume_;
     }
@@ -106,12 +104,23 @@ void MainWindow::Draw()
         ImGui::SliderFloat("Frequency (Hz)", &frequency_, 20.0f, 2000.0f, "%.1f Hz");
         ImGui::SliderFloat("Volume", &volume_, 0.0f, 1.0f);
         
-        // Show waveform
-        if (playing_ && !audio_buffer_.empty())
+        // Show waveform from audio interface
+        if (playing_)
         {
-            ImGui::PlotLines("Waveform", audio_buffer_.data(), 
-                            static_cast<int>(audio_buffer_.size()), 0, nullptr, -1.0f, 1.0f, 
-                            ImVec2(0, 80));
+            const auto& samples = audio_interface_.getCurrentSamples();
+            if (!samples.empty())
+            {
+                // Convert short samples to float for visualization
+                std::vector<float> float_samples(samples.size());
+                for (size_t i = 0; i < samples.size(); ++i)
+                {
+                    float_samples[i] = samples[i] / 32767.0f;
+                }
+                
+                ImGui::PlotLines("Waveform", float_samples.data(), 
+                                static_cast<int>(float_samples.size()), 0, nullptr, -1.0f, 1.0f, 
+                                ImVec2(0, 80));
+            }
         }
 
         ImGui::Separator();

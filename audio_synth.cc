@@ -1,168 +1,59 @@
 #include "audio_synth.h"
-#include <AL/al.h>
-#include <AL/alc.h>
+#include "absl/log/log.h"
 #include <cmath>
-#include <vector>
-#include <cstdio>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
-AudioSynth::AudioSynth() 
-    : m_device(nullptr)
-    , m_context(nullptr)
-    , m_source(0)
-    , m_buffer(0)
-    , m_isPlaying(false) {
+AudioSynth::AudioSynth() {
 }
 
 AudioSynth::~AudioSynth() {
-    stopTone();
-    
-    if (m_buffer) {
-        alDeleteBuffers(1, &m_buffer);
-    }
-    if (m_source) {
-        alDeleteSources(1, &m_source);
-    }
-    if (m_context) {
-        alcMakeContextCurrent(nullptr);
-        alcDestroyContext(static_cast<ALCcontext*>(m_context));
-    }
-    if (m_device) {
-        alcCloseDevice(static_cast<ALCdevice*>(m_device));
-    }
 }
 
-bool AudioSynth::init() {
-    if (m_device) {
-        return true; // Already initialized
-    }
-    
-    // Open the default audio device
-    m_device = alcOpenDevice(nullptr);
-    if (!m_device) {
-        printf("Failed to open audio device\n");
-        return false;
-    }
-    
-    // Create audio context
-    m_context = alcCreateContext(static_cast<ALCdevice*>(m_device), nullptr);
-    if (!m_context) {
-        printf("Failed to create audio context\n");
-        alcCloseDevice(static_cast<ALCdevice*>(m_device));
-        m_device = nullptr;
-        return false;
-    }
-    
-    // Make the context current
-    if (!alcMakeContextCurrent(static_cast<ALCcontext*>(m_context))) {
-        printf("Failed to make context current\n");
-        alcDestroyContext(static_cast<ALCcontext*>(m_context));
-        alcCloseDevice(static_cast<ALCdevice*>(m_device));
-        m_context = nullptr;
-        m_device = nullptr;
-        return false;
-    }
-    
-    // Generate source
-    alGenSources(1, &m_source);
-    ALenum error = alGetError();
-    if (error != AL_NO_ERROR) {
-        printf("Failed to generate audio source: %d\n", error);
-        return false;
-    }
-    
-    // Set source properties
-    alSourcef(m_source, AL_PITCH, 1.0f);
-    alSourcef(m_source, AL_GAIN, 0.3f);
-    alSource3f(m_source, AL_POSITION, 0.0f, 0.0f, 0.0f);
-    alSource3f(m_source, AL_VELOCITY, 0.0f, 0.0f, 0.0f);
-    alSourcei(m_source, AL_LOOPING, AL_TRUE);
-    
-    return true;
-}
-
-void AudioSynth::generateSineWave(float frequency, float duration, int sampleRate) {
+std::vector<short> AudioSynth::generateSineWave(float frequency, float duration, 
+                                                int sampleRate, float volume) {
     // Calculate number of samples
     int numSamples = static_cast<int>(duration * sampleRate);
     std::vector<short> samples(numSamples);
+    
+    LOG(INFO) << "Generating sine wave: " << frequency << " Hz, " 
+              << duration << "s, " << numSamples << " samples";
     
     // Generate sine wave
     for (int i = 0; i < numSamples; i++) {
         float t = static_cast<float>(i) / sampleRate;
         float value = std::sin(2.0f * M_PI * frequency * t);
-        samples[i] = static_cast<short>(value * 32767.0f * 0.3f); // Scale and convert to 16-bit
+        samples[i] = static_cast<short>(value * 32767.0f * volume);
     }
     
-    // Delete old buffer if it exists
-    if (m_buffer) {
-        alDeleteBuffers(1, &m_buffer);
-        m_buffer = 0;
-    }
-    
-    // Generate new buffer
-    alGenBuffers(1, &m_buffer);
-    ALenum error = alGetError();
-    if (error != AL_NO_ERROR) {
-        printf("Failed to generate audio buffer: %d\n", error);
-        return;
-    }
-    
-    // Fill buffer with sine wave data
-    alBufferData(m_buffer, AL_FORMAT_MONO16, samples.data(), 
-                 numSamples * sizeof(short), sampleRate);
-    error = alGetError();
-    if (error != AL_NO_ERROR) {
-        printf("Failed to fill audio buffer: %d\n", error);
-        return;
-    }
-    
-    // Attach buffer to source
-    alSourcei(m_source, AL_BUFFER, m_buffer);
+    return samples;
 }
 
-void AudioSynth::startTone(float frequency, float volume) {
-    if (!init()) {
-        return;
+std::vector<short> AudioSynth::generateSineWaveCycle(float frequency, int sampleRate, 
+                                                     float volume) {
+    // Calculate samples needed for exactly one cycle
+    // This ensures seamless looping
+    float cycleTime = 1.0f / frequency;
+    int numSamples = static_cast<int>(cycleTime * sampleRate);
+    
+    // Ensure at least a minimum number of samples for quality
+    if (numSamples < 10) {
+        numSamples = 10;
     }
     
-    // Generate a 1-second sine wave at the given frequency
-    // This will loop continuously due to AL_LOOPING being set to AL_TRUE
-    generateSineWave(frequency, 1.0f, 44100);
+    std::vector<short> samples(numSamples);
     
-    // Set volume
-    alSourcef(m_source, AL_GAIN, volume);
+    LOG(INFO) << "Generating sine wave cycle: " << frequency << " Hz, " 
+              << numSamples << " samples per cycle";
     
-    // Start playing if not already playing
-    if (!m_isPlaying) {
-        alSourcePlay(m_source);
-        m_isPlaying = true;
-    }
-}
-
-void AudioSynth::stopTone() {
-    if (m_isPlaying && m_source) {
-        alSourceStop(m_source);
-        m_isPlaying = false;
-    }
-}
-
-void AudioSynth::updateTone(float frequency, float volume) {
-    if (!m_isPlaying) {
-        return;
+    // Generate one complete cycle
+    for (int i = 0; i < numSamples; i++) {
+        float phase = static_cast<float>(i) / numSamples; // 0 to 1
+        float value = std::sin(2.0f * M_PI * phase);
+        samples[i] = static_cast<short>(value * 32767.0f * volume);
     }
     
-    // Stop current playback
-    alSourceStop(m_source);
-    
-    // Generate new sine wave with updated frequency
-    generateSineWave(frequency, 1.0f, 44100);
-    
-    // Update volume
-    alSourcef(m_source, AL_GAIN, volume);
-    
-    // Resume playback
-    alSourcePlay(m_source);
+    return samples;
 }
