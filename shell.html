@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ImGui - Bazel + Emscripten + WebGL</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #222;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+      .header {
+        color: #fff;
+        text-align: center;
+        padding: 20px;
+      }
+      .emscripten {
+        padding: 0;
+        margin: 0 auto;
+        display: block;
+        border: 0;
+        max-width: 100%;
+      }
+      canvas.emscripten {
+        border: 1px solid black;
+        background-color: #333;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      }
+      .spinner {
+        height: 50px;
+        width: 50px;
+        margin: 20px auto;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #3498db;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      #status {
+        color: #fff;
+        margin: 10px;
+        text-align: center;
+      }
+      #status.error {
+        color: #ff6b6b;
+        background-color: #331111;
+        padding: 15px;
+        border-radius: 5px;
+        max-width: 600px;
+      }
+      #progress {
+        width: 50%;
+        margin: 10px auto;
+        height: 20px;
+        background-color: #555;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+      #progress-bar {
+        width: 0%;
+        height: 100%;
+        background-color: #3498db;
+        transition: width 0.3s;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Dear ImGui - WebGL Demo</h1>
+      <p>Built with Bazel + Emscripten</p>
+    </div>
+    
+    <div id="status">Downloading...</div>
+    <div id="progress"><div id="progress-bar"></div></div>
+    <div class="spinner" id="spinner"></div>
+    
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex=-1></canvas>
+    
+    <script type='text/javascript'>
+      var statusElement = document.getElementById('status');
+      var progressElement = document.getElementById('progress');
+      var progressBarElement = document.getElementById('progress-bar');
+      var spinnerElement = document.getElementById('spinner');
+
+      // Check for WebGL2 support early
+      (function() {
+        var testCanvas = document.createElement('canvas');
+        var gl = testCanvas.getContext('webgl2');
+        if (!gl) {
+          statusElement.className = 'error';
+          statusElement.innerHTML = 'Error: Your browser does not support WebGL 2. Please update your browser or try a different one.';
+          spinnerElement.style.display = 'none';
+          progressElement.style.display = 'none';
+          return;
+        }
+        
+        // Listen for context creation errors
+        testCanvas.addEventListener('webglcontextcreationerror', function(e) {
+          statusElement.className = 'error';
+          statusElement.innerHTML = 'Error: Failed to create WebGL context: ' + e.statusMessage;
+          spinnerElement.style.display = 'none';
+          progressElement.style.display = 'none';
+        }, false);
+      })();
+
+      var Module = {
+        preRun: [],
+        postRun: [],
+        print: (function() {
+          return function(text) {
+            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+            console.log(text);
+          };
+        })(),
+        printErr: function(text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          console.error(text);
+          // Show errors in the UI
+          statusElement.className = 'error';
+          statusElement.innerHTML = 'Error: ' + text + '<br>Check the browser console for details.';
+          spinnerElement.style.display = 'none';
+        },
+        canvas: (function() {
+          var canvas = document.getElementById('canvas');
+          
+          // Handle context loss
+          canvas.addEventListener("webglcontextlost", function(e) {
+            console.error('WebGL context lost');
+            statusElement.className = 'error';
+            statusElement.innerHTML = 'Error: WebGL context was lost. Please reload the page.';
+            e.preventDefault();
+          }, false);
+          
+          // Handle context restored
+          canvas.addEventListener("webglcontextrestored", function(e) {
+            console.log('WebGL context restored');
+            statusElement.innerHTML = 'WebGL context restored';
+          }, false);
+          
+          return canvas;
+        })(),
+        setStatus: function(text) {
+          if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+          if (text === Module.setStatus.last.text) return;
+          var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+          var now = Date.now();
+          if (m && now - Module.setStatus.last.time < 30) return;
+          Module.setStatus.last.time = now;
+          Module.setStatus.last.text = text;
+          if (m) {
+            text = m[1];
+            progressBarElement.style.width = (parseInt(m[2])/parseInt(m[4])*100) + '%';
+          } else {
+            progressBarElement.style.width = '0%';
+          }
+          statusElement.innerHTML = text;
+          
+          // Hide spinner and progress when done
+          if (text === '') {
+            spinnerElement.style.display = 'none';
+            progressElement.style.display = 'none';
+          }
+        },
+        totalDependencies: 0,
+        monitorRunDependencies: function(left) {
+          this.totalDependencies = Math.max(this.totalDependencies, left);
+          Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
+        },
+        onRuntimeInitialized: function() {
+          statusElement.innerHTML = 'Running...';
+          setTimeout(function() {
+            statusElement.innerHTML = '';
+          }, 1000);
+        }
+      };
+      
+      Module.setStatus('Downloading...');
+      
+      // Catch all unhandled errors
+      window.onerror = function(message, source, lineno, colno, error) {
+        var errorMsg = 'Error: ' + message;
+        if (error && error.stack) {
+          errorMsg += '<br><small>' + error.stack.split('\n')[0] + '</small>';
+        }
+        statusElement.className = 'error';
+        statusElement.innerHTML = errorMsg + '<br>Please check the browser console for more details.';
+        spinnerElement.style.display = 'none';
+        progressElement.style.display = 'none';
+        console.error('Unhandled error:', message, source, lineno, colno, error);
+        return true; // Prevent default error handling
+      };
+      
+      // Handle page visibility changes
+      document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+          console.log('Page hidden');
+        } else {
+          console.log('Page visible');
+        }
+      });
+    </script>
+    {{{ SCRIPT }}}
+  </body>
+</html>
