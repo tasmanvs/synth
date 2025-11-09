@@ -2,6 +2,7 @@
 
 MainWindow::MainWindow()
     : show_demo_window_(true)
+    , show_implot_demo_window_(true)
     , show_another_window_(false)
     , clear_color_(0.45f, 0.55f, 0.60f, 1.00f)
     , slider_value_(0.0f)
@@ -24,13 +25,18 @@ void MainWindow::Draw()
     if (show_demo_window_)
         ImGui::ShowDemoWindow(&show_demo_window_);
 
-    // 2. Show a simple window
+    // 2. Show the ImPlot demo window
+    if (show_implot_demo_window_)
+        ImPlot::ShowDemoWindow(&show_implot_demo_window_);
+
+    // 3. Show a simple window
     {
         ImGui::Begin("Hello, Bazel + ImGui + WebGL!");
 
         ImGui::Text("This is ImGui running in a web browser with WebGL!");
         ImGui::Text("Built with Bazel and Emscripten!");
-        ImGui::Checkbox("Demo Window", &show_demo_window_);
+        ImGui::Checkbox("ImGui Demo Window", &show_demo_window_);
+        ImGui::Checkbox("ImPlot Demo Window", &show_implot_demo_window_);
         ImGui::Checkbox("Another Window", &show_another_window_);
 
         ImGui::SliderFloat("float", &slider_value_, 0.0f, 1.0f);
@@ -47,7 +53,7 @@ void MainWindow::Draw()
         ImGui::End();
     }
 
-    // 3. Show another simple window
+    // 4. Show another simple window
     if (show_another_window_)
     {
         ImGui::Begin("Another Window", &show_another_window_);

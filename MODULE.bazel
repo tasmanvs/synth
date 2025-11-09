@@ -7,4 +7,5 @@ module(
 # Add external dependencies here using bazel_dep()
 
 bazel_dep(name = "abseil-cpp", version = "20240116.2")
-bazel_dep(name = "imgui", version = "1.92.2")
+bazel_dep(name = "imgui", version = "1.91.8")
+bazel_dep(name = "implot", version = "0.16")

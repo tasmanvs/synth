@@ -48,6 +48,7 @@ cc_library(
     hdrs = ["main_window.h"],
     deps = [
         "@imgui//:imgui",
+        "@implot//:implot",
     ],
 )
 
