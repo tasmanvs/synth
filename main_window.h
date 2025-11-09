@@ -14,7 +14,6 @@ public:
 
 private:
     void GenerateAudioSamples();
-    void GenerateCustomBuffer();
 
     bool show_demo_window_;
     bool show_implot_demo_window_;
@@ -30,10 +29,4 @@ private:
     double phase_;
     int sample_rate_;
     std::vector<float> audio_buffer_;
-    
-    // Custom buffer parameters
-    bool playing_custom_;
-    bool regenerate_requested_;
-    std::vector<float> custom_buffer_;
-    int custom_buffer_size_;
 };
