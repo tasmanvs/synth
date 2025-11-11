@@ -85,7 +85,7 @@
     <div id="progress"><div id="progress-bar"></div></div>
     <div class="spinner" id="spinner"></div>
     
-    <canvas class="emscripten" id="canvas" oncontextmenu="return false;" tabindex=-1></canvas>
+    <canvas class="emscripten" id="canvas" tabindex=-1></canvas>
     
     <script type='text/javascript'>
       var statusElement = document.getElementById('status');
@@ -93,87 +93,43 @@
       var progressBarElement = document.getElementById('progress-bar');
       var spinnerElement = document.getElementById('spinner');
 
-      // Check for WebGL2 support early
-      (function() {
-        var testCanvas = document.createElement('canvas');
-        var gl = testCanvas.getContext('webgl2');
-        if (!gl) {
-          statusElement.className = 'error';
-          statusElement.innerHTML = 'Error: Your browser does not support WebGL 2. Please update your browser or try a different one.';
-          spinnerElement.style.display = 'none';
-          progressElement.style.display = 'none';
-          return;
-        }
-        
-        // Listen for context creation errors
-        testCanvas.addEventListener('webglcontextcreationerror', function(e) {
-          statusElement.className = 'error';
-          statusElement.innerHTML = 'Error: Failed to create WebGL context: ' + e.statusMessage;
-          spinnerElement.style.display = 'none';
-          progressElement.style.display = 'none';
-        }, false);
-      })();
-
       var Module = {
         preRun: [],
         postRun: [],
-        print: (function() {
-          return function(text) {
-            if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-            console.log(text);
-          };
-        })(),
+        print: function(text) {
+          if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+          console.log(text);
+        },
         printErr: function(text) {
           if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
           console.error(text);
-          // Show errors in the UI
           statusElement.className = 'error';
-          statusElement.innerHTML = 'Error: ' + text + '<br>Check the browser console for details.';
+          statusElement.innerHTML = 'Error: ' + text;
           spinnerElement.style.display = 'none';
         },
         canvas: (function() {
           var canvas = document.getElementById('canvas');
           
-          // Handle context loss
-          canvas.addEventListener("webglcontextlost", function(e) {
-            console.error('WebGL context lost');
-            statusElement.className = 'error';
-            statusElement.innerHTML = 'Error: WebGL context was lost. Please reload the page.';
-            e.preventDefault();
-          }, false);
-          
-          // Handle context restored
-          canvas.addEventListener("webglcontextrestored", function(e) {
-            console.log('WebGL context restored');
-            statusElement.innerHTML = 'WebGL context restored';
-          }, false);
-          
-          // Prevent context menu on canvas - must be done here before Emscripten processes it
-          console.log('*** SETTING UP CONTEXT MENU PREVENTION IN MODULE.CANVAS ***');
+          // Prevent context menu on canvas
           canvas.oncontextmenu = function(e) {
-            console.log('oncontextmenu inline handler triggered');
             e.preventDefault();
-            e.stopPropagation();
             return false;
           };
           
-          // Also prevent at mousedown level for right clicks
+          canvas.addEventListener('contextmenu', function(e) {
+            console.log('🔧 Context menu prevented!');
+            e.preventDefault();
+            e.stopPropagation();
+            return false;
+          }, true);
+          
           canvas.addEventListener('mousedown', function(e) {
             if (e.button === 2) {
-              console.log('Right click mousedown captured, preventing default');
               e.preventDefault();
             }
           }, true);
           
-          // Prevent context menu with capture
-          canvas.addEventListener('contextmenu', function(e) {
-            console.log('🔧 UPDATED shell.html running - contextmenu event captured, preventing default');
-            e.preventDefault();
-            e.stopPropagation();
-            return false;
-          }, true);
-          
-          console.log('🚀 CANVAS SETUP COMPLETE - Updated shell.html with context menu prevention');
+          console.log('🚀 Canvas setup complete with context menu prevention');
           
           return canvas;
         })(),
@@ -193,7 +149,6 @@
           }
           statusElement.innerHTML = text;
           
-          // Hide spinner and progress when done
           if (text === '') {
             spinnerElement.style.display = 'none';
             progressElement.style.display = 'none';
@@ -205,51 +160,26 @@
           Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All downloads complete.');
         },
         onRuntimeInitialized: function() {
-          console.log('*** RUNTIME INITIALIZED - VERSION 2024-11-10-v2 ***');
           statusElement.innerHTML = 'Running...';
           setTimeout(function() {
             statusElement.innerHTML = '';
           }, 1000);
-          
-          // Re-apply context menu prevention after runtime initialization
-          var canvas = Module.canvas;
-          if (canvas) {
-            console.log('*** RE-APPLYING CONTEXT MENU PREVENTION AFTER RUNTIME INIT ***');
-            // Remove any existing handlers
-            canvas.oncontextmenu = function(e) {
-              console.log('oncontextmenu post-init handler triggered');
-              e.preventDefault();
-              return false;
-            };
-          }
+          console.log('✅ Runtime initialized - context menu prevention is active');
         }
       };
       
       Module.setStatus('Downloading...');
       
-      // Catch all unhandled errors
       window.onerror = function(message, source, lineno, colno, error) {
         var errorMsg = 'Error: ' + message;
-        if (error && error.stack) {
-          errorMsg += '<br><small>' + error.stack.split('\n')[0] + '</small>';
-        }
         statusElement.className = 'error';
-        statusElement.innerHTML = errorMsg + '<br>Please check the browser console for more details.';
+        statusElement.innerHTML = errorMsg;
         spinnerElement.style.display = 'none';
         progressElement.style.display = 'none';
-        console.error('Unhandled error:', message, source, lineno, colno, error);
-        return true; // Prevent default error handling
+        console.error('Error:', message);
+        return true;
       };
-      
-      // Handle page visibility changes
-      document.addEventListener('visibilitychange', function() {
-        if (document.hidden) {
-          console.log('Page hidden');
-        } else {
-          console.log('Page visible');
-        }
-      });
     </script>
-    {{{ SCRIPT }}}
+    <script async type="text/javascript" src="imgui_webgl_bin.js"></script>
   </body>
 </html>

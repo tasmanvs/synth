@@ -1,6 +1,7 @@
 cc_binary(
-    name = "imgui_webgl",
+    name = "imgui_webgl_bin",
     srcs = ["imgui_webgl.cc"],
+    additional_linker_inputs = ["//:shell.html"],
     deps = [
         "@imgui//:imgui",
         "//:imgui_glfw_opengl3_emscripten",
@@ -15,6 +16,7 @@ cc_binary(
         "-sALLOW_MEMORY_GROWTH=1",
         "-sFULL_ES3=1",
         "-sWASM=1",
+        "-sENVIRONMENT=web",
         # Enable exceptions for better error handling
         "-fexceptions",
         "-sDISABLE_EXCEPTION_CATCHING=0",
@@ -22,7 +24,7 @@ cc_binary(
         "-sMALLOC=emmalloc",
         # Provide better error messages
         "-sASSERTIONS=1",
-        # Use custom shell file
+        # Use custom shell file - this should generate HTML
         "--shell-file=$(location //:shell.html)",
         # Include pre-loaded JavaScript for Web Audio
         "--pre-js=$(location //audio:audio_pre.js)",
@@ -36,6 +38,14 @@ cc_binary(
     ],
     visibility = ["//visibility:public"],
     target_compatible_with = ["@platforms//cpu:wasm32"],
+)
+
+# Create a filegroup that includes the generated files
+filegroup(
+    name = "imgui_webgl",
+    srcs = [":imgui_webgl_bin"],
+    output_group = "default",
+    visibility = ["//visibility:public"],
 )
 
 cc_binary(
