@@ -1,7 +1,11 @@
 ---
+applyTo: '**'
+---
+Use bazelisk instead of bazel
+
+---
 applyTo: '*.cc, *.h, *.cpp, *.hpp'
 ---
-
 Member variables should have `_` suffix.
 Variables should be snake_case
 Functions should be PascalCase

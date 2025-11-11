@@ -5,6 +5,7 @@ cc_library(
     deps = [
         "@imgui//:imgui",
         "@implot//:implot",
+        "//node_editor:imgui_node_editor",
         "//audio:audio_synth",
         "//audio:audio_interface",
         "@abseil-cpp//absl/log",
