@@ -91,6 +91,10 @@ int main(int argc, char** argv)
     ImGui_ImplGlfw_InitForOpenGL(g_window, true);
     ImGui_ImplOpenGL3_Init(glsl_version);
     LOG(INFO) << "ImGui platform/renderer backends initialized";
+    
+    // Install Emscripten-specific callbacks (including wheel callback for proper scrolling)
+    ImGui_ImplGlfw_InstallEmscriptenCallbacks(g_window, "#canvas");
+    LOG(INFO) << "Emscripten callbacks installed";
 
     // Create main window
     g_main_window = new MainWindow();
