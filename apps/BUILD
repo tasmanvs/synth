@@ -40,10 +40,25 @@ cc_binary(
     target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
+# Copy the HTML file to the output directory (with two names for convenience)
+genrule(
+    name = "imgui_webgl_html",
+    srcs = ["imgui_webgl.html"],
+    outs = [
+        "imgui_webgl_generated.html",
+        "imgui_webgl_index.html",
+    ],
+    cmd = "cp $< $(location imgui_webgl_generated.html) && cp $< $(location imgui_webgl_index.html)",
+    visibility = ["//visibility:public"],
+)
+
 # Create a filegroup that includes the generated files
 filegroup(
     name = "imgui_webgl",
-    srcs = [":imgui_webgl_bin"],
+    srcs = [
+        ":imgui_webgl_bin",
+        ":imgui_webgl_html",
+    ],
     output_group = "default",
     visibility = ["//visibility:public"],
 )
