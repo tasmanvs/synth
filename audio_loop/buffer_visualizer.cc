@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "audio_loop/audio_output.h"
 #include "audio_loop/sine_buffer_generator.h"
 
 namespace {
@@ -35,6 +36,12 @@ struct VisualizerState {
     std::vector<std::vector<float>> buffers;
     std::vector<audio_loop::ContinuityResult> continuity_results;
     std::vector<float> concatenated;
+
+    audio_loop::AudioBufferPlayer audio_player;
+    float playback_volume = 0.6f;
+    bool audio_ready = false;
+    bool audio_failed = false;
+    std::string audio_message;
 };
 
 void RegenerateBuffers(VisualizerState* state) {
@@ -64,6 +71,63 @@ void RegenerateBuffers(VisualizerState* state) {
 
     state->generator = generator;
     state->concatenated = audio_loop::ConcatenateBuffers(state->buffers);
+}
+
+bool EnsureAudioInitialized(VisualizerState* state) {
+    if (state->audio_ready) {
+        return true;
+    }
+    if (state->audio_player.Initialize()) {
+        state->audio_ready = true;
+        state->audio_failed = false;
+        state->audio_player.SetVolume(state->playback_volume);
+        state->audio_message = "Audio engine ready.";
+        return true;
+    }
+    state->audio_failed = true;
+    state->audio_ready = false;
+    state->audio_message = "Failed to initialize XAudio2. Install the latest DirectX runtime.";
+    return false;
+}
+
+void DrawPlaybackSection(VisualizerState* state) {
+    ImGui::Separator();
+    ImGui::Text("Audio Playback");
+
+    if (!state->audio_ready) {
+        if (!state->audio_message.empty()) {
+            ImGui::TextWrapped("%s", state->audio_message.c_str());
+        }
+        if (ImGui::Button("Retry Audio Init")) {
+            EnsureAudioInitialized(state);
+        }
+        return;
+    }
+
+    if (ImGui::SliderFloat("Playback Volume", &state->playback_volume, 0.0f, 1.0f)) {
+        state->audio_player.SetVolume(state->playback_volume);
+    }
+
+    const bool has_samples = !state->concatenated.empty();
+    ImGui::BeginDisabled(!has_samples);
+    if (ImGui::Button("Play Buffers")) {
+        if (state->audio_player.Play(state->concatenated, state->config.sample_rate)) {
+            state->audio_message = "Playing concatenated buffer.";
+        } else {
+            state->audio_message = "Failed to start playback.";
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("Stop Playback")) {
+        state->audio_player.Stop();
+        state->audio_message = "Playback stopped.";
+    }
+
+    ImGui::Text("Status: %s", state->audio_player.IsPlaying() ? "Playing" : "Idle");
+    if (!state->audio_message.empty()) {
+        ImGui::TextWrapped("%s", state->audio_message.c_str());
+    }
 }
 
 // DirectX state copied from //examples:imgui_dx11
@@ -137,6 +201,8 @@ void DrawControlPanel(VisualizerState* state, bool* needs_regenerate) {
         ImGui::Separator();
         ImGui::Text("Max boundary delta: %.6f", max_diff);
     }
+
+    DrawPlaybackSection(state);
 
     ImGui::End();
 }
@@ -226,6 +292,7 @@ int main(int, char**) {
     state.config.sample_rate = 48000;
     state.config.amplitude = 0.8f;
     RegenerateBuffers(&state);
+    EnsureAudioInitialized(&state);
 
     bool done = false;
     while (!done) {

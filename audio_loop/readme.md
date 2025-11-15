@@ -22,3 +22,4 @@ bazel-bin/audio_loop/buffer_visualizer.exe
 ```
 
 Use the control window to tweak parameters. Leave **Auto Refresh** enabled for live updates or disable it and click **Regenerate Buffers** for deterministic comparisons.
+The **Audio Playback** section can stream the currently concatenated buffers through a simple XAudio2 player so you can listen for clicks while inspecting the plots.
