@@ -109,7 +109,7 @@ void MainWindow::Draw()
 
     // 3. Show a simple window
     {
-        ImGui::Begin("Hello, Bazel + ImGui + WebGL!");
+        ImGui::Begin("Hello, Bazel + ImGui + WebGL! V1");
 
         ImGui::Text("This is ImGui running in a web browser with WebGL!");
         ImGui::Text("Built with Bazel and Emscripten!");

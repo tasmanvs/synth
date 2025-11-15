@@ -26,16 +26,27 @@ AudioNode::AudioNode(int node_id, NodeType type)
 SourceNode::SourceNode(int node_id)
     : AudioNode(node_id, NodeType::kSource)
     , frequency_(440.0f)
-    , volume_(0.5f) {
+    , volume_(0.5f)
+    , phase_(0.0f)
+    , last_frequency_(440.0f)
+    , last_volume_(0.5f)
+    , parameters_changed_(false) {
 }
 
 std::vector<float> SourceNode::GenerateAudio(int num_samples, int sample_rate) {
     std::vector<float> output(num_samples);
     
+    // Generate continuous audio using phase accumulation
+    float phase_increment = 2.0f * M_PI * frequency_ / sample_rate;
+    
     for (int i = 0; i < num_samples; i++) {
-        float time = static_cast<float>(i) / sample_rate;
-        float phase = 2.0f * M_PI * frequency_ * time;
-        output[i] = std::sin(phase) * volume_;
+        output[i] = std::sin(phase_) * volume_;
+        
+        // Increment phase and wrap to prevent accumulation errors
+        phase_ += phase_increment;
+        if (phase_ >= 2.0f * M_PI) {
+            phase_ -= 2.0f * M_PI;
+        }
     }
     
     return output;
@@ -49,8 +60,12 @@ void SourceNode::Draw() {
     
     ImGui::Text("Source Node %d", node_id_);
     ImGui::PushItemWidth(120.0f);
-    ImGui::SliderFloat("Frequency", &frequency_, 20.0f, 2000.0f, "%.1f Hz");
-    ImGui::SliderFloat("Volume", &volume_, 0.0f, 1.0f, "%.2f");
+    if (ImGui::SliderFloat("Frequency", &frequency_, 20.0f, 2000.0f, "%.1f Hz")) {
+        parameters_changed_ = true;
+    }
+    if (ImGui::SliderFloat("Volume", &volume_, 0.0f, 1.0f, "%.2f")) {
+        parameters_changed_ = true;
+    }
     ImGui::PopItemWidth();
     
     // Output pin
@@ -60,6 +75,15 @@ void SourceNode::Draw() {
     
     ed::EndNode();
     ImGui::PopID();
+}
+
+bool SourceNode::HasParametersChanged() {
+    if (frequency_ != last_frequency_ || volume_ != last_volume_) {
+        last_frequency_ = frequency_;
+        last_volume_ = volume_;
+        return true;
+    }
+    return parameters_changed_;
 }
 
 // ============================================================================
@@ -228,7 +252,7 @@ void PlayerNode::SetPlaying(bool playing) {
 void PlayerNode::UpdateAudio(int sample_rate) {
     if (!playing_ || !audio_interface_) return;
     
-    // Generate a buffer of audio
+    // Generate a buffer of audio with current parameters
     const int buffer_size = sample_rate / 10;  // 100ms buffer
     auto audio_data = GenerateAudio(buffer_size, sample_rate);
     
@@ -244,11 +268,11 @@ void PlayerNode::UpdateAudio(int sample_rate) {
         short_data[i] = static_cast<short>(clamped * 32767.0f);
     }
     
-    // Only update if not currently playing to avoid glitches
-    if (!audio_interface_->isPlaying()) {
-        audio_interface_->playSamples(short_data, sample_rate, true);
-        audio_interface_->play();
-    }
+    // Stop current audio, update buffer, and restart
+    // This is necessary because OpenAL doesn't allow buffer updates while playing
+    audio_interface_->stop();
+    audio_interface_->playSamples(short_data, sample_rate, true);
+    audio_interface_->play();
 }
 
 // ============================================================================
@@ -439,9 +463,26 @@ bool AudioNodeGraph::IsPinOutput(int pin_id) {
 
 void AudioNodeGraph::Update(int sample_rate) {
     // Update player node audio if it exists and is playing
-    if (player_node_) {
-        player_node_->UpdateAudio(sample_rate);
+    if (player_node_ && player_node_->IsPlaying()) {
+        // Check if any parameters have changed
+        if (HasGraphChanged()) {
+            // Force audio update
+            player_node_->UpdateAudio(sample_rate);
+        }
     }
+}
+
+bool AudioNodeGraph::HasGraphChanged() {
+    for (auto& [node_id, node] : nodes_) {
+        if (node->GetNodeType() == NodeType::kSource) {
+            SourceNode* source = static_cast<SourceNode*>(node.get());
+            if (source->HasParametersChanged()) {
+                source->ResetChangeFlag();
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 void AudioNodeGraph::Draw() {

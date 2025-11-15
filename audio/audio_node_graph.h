@@ -61,9 +61,17 @@ public:
     float GetFrequency() const { return frequency_; }
     float GetVolume() const { return volume_; }
     
+    // Check if parameters have changed since last check
+    bool HasParametersChanged();
+    void ResetChangeFlag() { parameters_changed_ = false; }
+    
 private:
     float frequency_;
     float volume_;
+    float phase_;  // Track phase for continuous audio generation
+    float last_frequency_;
+    float last_volume_;
+    bool parameters_changed_;
 };
 
 // Sum node: Adds the output of two input nodes
@@ -136,6 +144,9 @@ public:
     // Update and draw
     void Update(int sample_rate);
     void Draw();
+    
+    // Check if any parameters have changed
+    bool HasGraphChanged();
     
     // Access the editor context
     ax::NodeEditor::EditorContext* GetEditorContext() { return editor_context_; }

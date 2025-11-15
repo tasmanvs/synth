@@ -3,6 +3,12 @@ applyTo: '**'
 ---
 Use bazelisk instead of bazel
 
+Build the main audio app with the command:
+ bazelisk build //apps:imgui_webgl --platforms=@emsdk//:platform_wasm
+
+
+
+
 ---
 applyTo: '*.cc, *.h, *.cpp, *.hpp'
 ---
