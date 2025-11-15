@@ -43,10 +43,11 @@ std::vector<float> SourceNode::GenerateAudio(int num_samples, int sample_rate) {
 
 void SourceNode::Draw() {
     namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
     
     ed::BeginNode(node_id_);
     
-    ImGui::Text("Source Node");
+    ImGui::Text("Source Node %d", node_id_);
     ImGui::PushItemWidth(120.0f);
     ImGui::SliderFloat("Frequency", &frequency_, 20.0f, 2000.0f, "%.1f Hz");
     ImGui::SliderFloat("Volume", &volume_, 0.0f, 1.0f, "%.2f");
@@ -58,6 +59,7 @@ void SourceNode::Draw() {
     ed::EndPin();
     
     ed::EndNode();
+    ImGui::PopID();
 }
 
 // ============================================================================
@@ -100,9 +102,10 @@ std::vector<float> SumNode::GenerateAudio(int num_samples, int sample_rate) {
 void SumNode::Draw() {
     namespace ed = ax::NodeEditor;
     
+    ImGui::PushID(node_id_);
     ed::BeginNode(node_id_);
     
-    ImGui::Text("Sum Node");
+    ImGui::Text("Sum Node %d", node_id_);
     
     // Input pins
     ed::BeginPin(input_pin_a_id_, ed::PinKind::Input);
@@ -121,6 +124,7 @@ void SumNode::Draw() {
     ed::EndPin();
     
     ed::EndNode();
+    ImGui::PopID();
 }
 
 bool SumNode::AddInput(AudioNode* input_node) {
@@ -169,9 +173,10 @@ std::vector<float> PlayerNode::GenerateAudio(int num_samples, int sample_rate) {
 void PlayerNode::Draw() {
     namespace ed = ax::NodeEditor;
     
+    ImGui::PushID(node_id_);
     ed::BeginNode(node_id_);
     
-    ImGui::Text("Player Node");
+    ImGui::Text("Player Node %d", node_id_);
     
     // Input pin
     ed::BeginPin(input_pin_id_, ed::PinKind::Input);
@@ -189,6 +194,7 @@ void PlayerNode::Draw() {
     ImGui::PopItemWidth();
     
     ed::EndNode();
+    ImGui::PopID();
 }
 
 bool PlayerNode::AddInput(AudioNode* input_node) {
