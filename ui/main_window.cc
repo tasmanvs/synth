@@ -14,6 +14,7 @@ MainWindow::MainWindow()
     , show_another_window_(false)
     , show_node_editor_window_(false)
     , show_audio_nodes_window_(true)
+    , show_sine_buffer_window_(true)
     , clear_color_(0.45f, 0.55f, 0.60f, 1.00f)
     , slider_value_(0.0f)
     , counter_(0)
@@ -21,6 +22,13 @@ MainWindow::MainWindow()
     , volume_(0.3f)
     , playing_(false)
     , sample_rate_(44100)
+    , sine_buffer_playing_(false)
+    , sine_buffer_dirty_(true)
+    , sine_buffer_sample_rate_(48000)
+    , sine_buffer_num_frames_(2048)
+    , sine_buffer_frequency_hz_(220.0f)
+    , sine_buffer_volume_(0.5f)
+    , sine_buffer_generator_(sine_buffer_frequency_hz_)
     , node_editor_context_(nullptr)
     , node_editor_initialized_(false)
 {
@@ -46,49 +54,53 @@ MainWindow::~MainWindow()
 
 void MainWindow::Update()
 {
-    // Update audio playback (legacy simple synth)
+    // Update audio playback (legacy simple synth or sine buffer)
     static bool was_playing = false;
     static float last_frequency = 0.0f;
     static float last_volume = 0.0f;
-    
-    if (playing_ != was_playing)
-    {
-        if (playing_)
+
+    if (sine_buffer_playing_) {
+        RefreshSineBufferIfNeeded();
+    } else {
+        if (playing_ != was_playing)
         {
-            LOG(INFO) << "Starting audio tone at " << frequency_ << " Hz, volume " << volume_;
+            if (playing_)
+            {
+                LOG(INFO) << "Starting audio tone at " << frequency_ << " Hz, volume " << volume_;
+                
+                // Generate waveform using synth
+                auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
+                
+                // Play using audio interface
+                audio_interface_.playSamples(samples, sample_rate_, true);
+                audio_interface_.play();
+            }
+            else
+            {
+                LOG(INFO) << "Stopping audio tone";
+                audio_interface_.stop();
+            }
+            was_playing = playing_;
+            last_frequency = frequency_;
+            last_volume = volume_;
+        }
+        else if (playing_ && (frequency_ != last_frequency || volume_ != last_volume))
+        {
+            LOG(INFO) << "Updating tone: frequency=" << frequency_ << " Hz, volume=" << volume_;
             
-            // Generate waveform using synth
+            // Stop current playback
+            audio_interface_.stop();
+            
+            // Generate new waveform
             auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
             
-            // Play using audio interface
+            // Play new waveform
             audio_interface_.playSamples(samples, sample_rate_, true);
             audio_interface_.play();
+            
+            last_frequency = frequency_;
+            last_volume = volume_;
         }
-        else
-        {
-            LOG(INFO) << "Stopping audio tone";
-            audio_interface_.stop();
-        }
-        was_playing = playing_;
-        last_frequency = frequency_;
-        last_volume = volume_;
-    }
-    else if (playing_ && (frequency_ != last_frequency || volume_ != last_volume))
-    {
-        LOG(INFO) << "Updating tone: frequency=" << frequency_ << " Hz, volume=" << volume_;
-        
-        // Stop current playback
-        audio_interface_.stop();
-        
-        // Generate new waveform
-        auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
-        
-        // Play new waveform
-        audio_interface_.playSamples(samples, sample_rate_, true);
-        audio_interface_.play();
-        
-        last_frequency = frequency_;
-        last_volume = volume_;
     }
     
     // Update audio node graph
@@ -109,7 +121,7 @@ void MainWindow::Draw()
 
     // 3. Show a simple window
     {
-        ImGui::Begin("Hello, Bazel + ImGui + WebGL! V1");
+        ImGui::Begin("Hello, Bazel + ImGui + WebGL! V100");
 
         ImGui::Text("This is ImGui running in a web browser with WebGL!");
         ImGui::Text("Built with Bazel and Emscripten!");
@@ -117,6 +129,7 @@ void MainWindow::Draw()
         ImGui::Checkbox("ImPlot Demo Window", &show_implot_demo_window_);
         ImGui::Checkbox("Node Editor Demo", &show_node_editor_window_);
         ImGui::Checkbox("Audio Nodes Window", &show_audio_nodes_window_);
+    ImGui::Checkbox("Sine Buffer Window", &show_sine_buffer_window_);
         ImGui::Checkbox("Another Window", &show_another_window_);
 
         ImGui::Separator();
@@ -179,6 +192,9 @@ void MainWindow::Draw()
     // 6. Show audio nodes window
     if (show_audio_nodes_window_)
         DrawAudioNodesWindow();
+
+    if (show_sine_buffer_window_)
+        DrawSineBufferWindow();
 }
 
 void MainWindow::DrawNodeEditorDemo()
@@ -344,4 +360,122 @@ void MainWindow::DrawAudioNodesWindow()
     }
     
     ImGui::End();
+}
+
+void MainWindow::DrawSineBufferWindow()
+{
+    ImGui::Begin("Sine Buffer Generator", &show_sine_buffer_window_, ImGuiWindowFlags_None);
+
+    ImGui::TextWrapped("Generate arbitrary-length sine buffers that preserve phase when re-uploaded to the audio interface.");
+    ImGui::Separator();
+
+    if (ImGui::SliderFloat("Frequency (Hz)", &sine_buffer_frequency_hz_, 10.0f, 2000.0f, "%.1f Hz")) {
+        sine_buffer_generator_.SetFrequency(sine_buffer_frequency_hz_);
+        sine_buffer_dirty_ = true;
+    }
+
+    if (ImGui::SliderFloat("Gain", &sine_buffer_volume_, 0.0f, 1.0f, "%.2f")) {
+        sine_buffer_dirty_ = true;
+    }
+
+    int sample_rate = sine_buffer_sample_rate_;
+    if (ImGui::InputInt("Sample Rate (Hz)", &sample_rate, 100, 1000)) {
+        sine_buffer_sample_rate_ = std::clamp(sample_rate, 8000, 192000);
+        sine_buffer_dirty_ = true;
+    }
+
+    int frame_count = sine_buffer_num_frames_;
+    if (ImGui::InputInt("Buffer Frames", &frame_count, 64, 512)) {
+        sine_buffer_num_frames_ = std::max(frame_count, 64);
+        sine_buffer_dirty_ = true;
+    }
+
+    if (ImGui::Button(sine_buffer_playing_ ? "Stop Buffer Playback" : "Play Buffer")) {
+        if (sine_buffer_playing_) {
+            StopSineBufferPlayback();
+        } else {
+            StartSineBufferPlayback();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Apply Settings")) {
+        sine_buffer_dirty_ = true;
+        RefreshSineBufferIfNeeded();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Preview Next Buffer")) {
+        audio_loop::SineWaveBufferGenerator preview_generator = sine_buffer_generator_;
+        audio_loop::AudioBuffer preview_buffer = preview_generator.CreateBuffer(
+            std::max(1, sine_buffer_num_frames_), std::max(1, sine_buffer_sample_rate_));
+        sine_buffer_preview_ = std::move(preview_buffer.samples);
+    }
+
+    if (sine_buffer_playing_) {
+        ImGui::Text("Current phase: %.4f rad", static_cast<float>(sine_buffer_generator_.GetPhase()));
+    }
+
+    if (!sine_buffer_preview_.empty()) {
+        if (ImPlot::BeginPlot("Buffer Preview", ImVec2(-1, 160))) {
+            ImPlot::SetupAxes("Sample index", "Amplitude", ImPlotAxisFlags_NoGridLines, ImPlotAxisFlags_NoGridLines);
+            ImPlot::SetupAxesLimits(0.0, static_cast<double>(sine_buffer_preview_.size()), -1.1, 1.1, ImPlotCond_Always);
+            ImPlot::PlotLine("buffer", sine_buffer_preview_.data(), static_cast<int>(sine_buffer_preview_.size()));
+            ImPlot::EndPlot();
+        }
+    } else {
+        ImGui::TextUnformatted("Preview will appear after generating a buffer.");
+    }
+
+    ImGui::End();
+}
+
+std::vector<short> MainWindow::BuildSineBufferSamples()
+{
+    const int frames = std::max(1, sine_buffer_num_frames_);
+    const int sample_rate = std::max(1, sine_buffer_sample_rate_);
+    audio_loop::AudioBuffer buffer =
+        sine_buffer_generator_.CreateBuffer(frames, sample_rate);
+    sine_buffer_preview_ = buffer.samples;
+
+    std::vector<short> pcm(buffer.samples.size());
+    for (size_t i = 0; i < buffer.samples.size(); ++i) {
+        const float scaled = std::clamp(buffer.samples[i] * sine_buffer_volume_, -1.0f, 1.0f);
+        pcm[i] = static_cast<short>(scaled * 32767.0f);
+    }
+    return pcm;
+}
+
+void MainWindow::StartSineBufferPlayback()
+{
+    playing_ = false;
+    sine_buffer_playing_ = true;
+    sine_buffer_dirty_ = true;
+    RefreshSineBufferIfNeeded();
+}
+
+void MainWindow::StopSineBufferPlayback()
+{
+    if (!sine_buffer_playing_) {
+        return;
+    }
+    sine_buffer_playing_ = false;
+    sine_buffer_dirty_ = true;
+    audio_interface_.stop();
+}
+
+void MainWindow::RefreshSineBufferIfNeeded()
+{
+    if (!sine_buffer_playing_) {
+        return;
+    }
+    if (!sine_buffer_dirty_) {
+        audio_interface_.setVolume(sine_buffer_volume_);
+        return;
+    }
+
+    audio_interface_.stop();
+    auto samples = BuildSineBufferSamples();
+    audio_interface_.playSamples(samples, sine_buffer_sample_rate_, true);
+    audio_interface_.setVolume(sine_buffer_volume_);
+    audio_interface_.play();
+    sine_buffer_dirty_ = false;
 }
