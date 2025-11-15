@@ -1,14 +1,24 @@
-I'd like to create a library that can create audio at different frequencies.
+# Audio Loop Playground
 
-The audio created is put into a buffer of arbitrary size, which will be passed to an audio interface to play via the speakers.
+This directory contains:
 
-A common issue that is encountered is that the phase isn't maintained between buffers. For instance, if the first buffer and second buffer have a discontinuity between the end of the first and start of the second, this introduces a "clicking" sound that is heard every time a new buffer is started.
+- `audio_loop_lib`: a phase-tracking oscillator (`PhaseContinuousSine`) that generates buffers of arbitrary length without introducing clicks between consecutive calls. Helper utilities expose continuity checks and buffer concatenation.
+- `buffer_visualizer`: a DirectX11 + ImGui/ImPlot desktop viewer (derived from `//examples:imgui_dx11`) that plots multiple buffers side-by-side while you tune frequency, amplitude, sample rate, buffer length, starting phase, and buffer count. Continuity metrics are listed per buffer junction.
+- `audio_buffer_test`: a gtest suite that validates smooth transitions across buffers, different buffer sizes, on-the-fly frequency changes, and detects intentional phase resets.
 
-One way to get around this is to keep track of the Phase of the signal each time we create a new buffer, ensuring continuity between buffers.
+## Running the tests
 
-I'd like to build a preliminary library for making these audio samples.
+Use `bazelisk` per the repo instructions:
 
-This will have 3 main parts:
-1. Audio library with buffer generation
-2. Imgui / implot draw code to visualize multiple buffers and ensure continuity with different frequencies, buffer lengths, and sample rates. (base this off //examples:imgui_dx11)
-3. unit tests with gtest to ensure adjacent buffers are continuous sinusoidal waves.
+```
+bazelisk test //audio_loop:audio_buffer_test
+```
+
+## Launching the visualizer
+
+```
+bazelisk build //audio_loop:buffer_visualizer
+bazel-bin/audio_loop/buffer_visualizer.exe
+```
+
+Use the control window to tweak parameters. Leave **Auto Refresh** enabled for live updates or disable it and click **Regenerate Buffers** for deterministic comparisons.
