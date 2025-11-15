@@ -12,7 +12,8 @@ MainWindow::MainWindow()
     : show_demo_window_(true)
     , show_implot_demo_window_(true)
     , show_another_window_(false)
-    , show_node_editor_window_(true)
+    , show_node_editor_window_(false)
+    , show_audio_nodes_window_(true)
     , clear_color_(0.45f, 0.55f, 0.60f, 1.00f)
     , slider_value_(0.0f)
     , counter_(0)
@@ -25,9 +26,12 @@ MainWindow::MainWindow()
 {
     LOG(INFO) << "MainWindow initialized with sample rate: " << sample_rate_;
     
-    // Initialize node editor
+    // Initialize node editor (for demo)
     ax::NodeEditor::Config config;
     node_editor_context_ = ax::NodeEditor::CreateEditor(&config);
+    
+    // Initialize audio node graph
+    audio_node_graph_ = std::make_unique<audio_nodes::AudioNodeGraph>(&audio_interface_);
 }
 
 MainWindow::~MainWindow()
@@ -42,7 +46,7 @@ MainWindow::~MainWindow()
 
 void MainWindow::Update()
 {
-    // Update audio playback
+    // Update audio playback (legacy simple synth)
     static bool was_playing = false;
     static float last_frequency = 0.0f;
     static float last_volume = 0.0f;
@@ -86,6 +90,11 @@ void MainWindow::Update()
         last_frequency = frequency_;
         last_volume = volume_;
     }
+    
+    // Update audio node graph
+    if (audio_node_graph_) {
+        audio_node_graph_->Update(sample_rate_);
+    }
 }
 
 void MainWindow::Draw()
@@ -107,6 +116,7 @@ void MainWindow::Draw()
         ImGui::Checkbox("ImGui Demo Window", &show_demo_window_);
         ImGui::Checkbox("ImPlot Demo Window", &show_implot_demo_window_);
         ImGui::Checkbox("Node Editor Demo", &show_node_editor_window_);
+        ImGui::Checkbox("Audio Nodes Window", &show_audio_nodes_window_);
         ImGui::Checkbox("Another Window", &show_another_window_);
 
         ImGui::Separator();
@@ -165,6 +175,10 @@ void MainWindow::Draw()
     // 5. Show node editor demo
     if (show_node_editor_window_)
         DrawNodeEditorDemo();
+    
+    // 6. Show audio nodes window
+    if (show_audio_nodes_window_)
+        DrawAudioNodesWindow();
 }
 
 void MainWindow::DrawNodeEditorDemo()
@@ -291,6 +305,43 @@ void MainWindow::DrawNodeEditorDemo()
     
     ed::End();
     ed::SetCurrentEditor(nullptr);
+    
+    ImGui::End();
+}
+
+void MainWindow::DrawAudioNodesWindow()
+{
+    ImGui::Begin("Audio Nodes", &show_audio_nodes_window_, ImGuiWindowFlags_MenuBar);
+    
+    if (ImGui::BeginMenuBar()) {
+        if (ImGui::BeginMenu("Create")) {
+            if (ImGui::MenuItem("Source Node")) {
+                audio_node_graph_->CreateSourceNode();
+            }
+            if (ImGui::MenuItem("Sum Node")) {
+                audio_node_graph_->CreateSumNode();
+            }
+            if (ImGui::MenuItem("Player Node")) {
+                audio_node_graph_->CreatePlayerNode();
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Help")) {
+            ImGui::MenuItem("Right-click background to create nodes", nullptr, false, false);
+            ImGui::MenuItem("Drag from output (Out ->) to input (-> In)", nullptr, false, false);
+            ImGui::MenuItem("Right-click link or node to delete", nullptr, false, false);
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+    }
+    
+    ImGui::TextWrapped("Create audio nodes and connect them to make sound!");
+    ImGui::Separator();
+    
+    // Draw the audio node graph
+    if (audio_node_graph_) {
+        audio_node_graph_->Draw();
+    }
     
     ImGui::End();
 }

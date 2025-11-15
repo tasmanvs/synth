@@ -19,6 +19,21 @@ cc_library(
     target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
+cc_library(
+    name = "audio_node_graph",
+    srcs = ["audio_node_graph.cc"],
+    hdrs = ["audio_node_graph.h"],
+    deps = [
+        ":audio_synth",
+        ":audio_interface",
+        "//node_editor:imgui_node_editor",
+        "@imgui//:imgui",
+        "@abseil-cpp//absl/log",
+    ],
+    visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//cpu:wasm32"],
+)
+
 exports_files([
     "audio.js",
     "audio_pre.js",

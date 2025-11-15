@@ -8,6 +8,7 @@ cc_library(
         "//node_editor:imgui_node_editor",
         "//audio:audio_synth",
         "//audio:audio_interface",
+        "//audio:audio_node_graph",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
     ],

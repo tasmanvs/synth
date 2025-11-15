@@ -11,6 +11,8 @@ cc_binary(
         "@abseil-cpp//absl/log:initialize",
     ],
     linkopts = [
+        "-o",
+        "imgui_webgl_bin.html",
         "-sUSE_GLFW=3",
         "-sUSE_WEBGL2=1",
         "-sALLOW_MEMORY_GROWTH=1",
