@@ -66,6 +66,12 @@ filegroup(
 )
 
 cc_binary(
+    name = "imgui_webgl_wrapper",
+    srcs = ["imgui_webgl_wrapper.cc"],
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
     name = "audio_webgl",
     srcs = ["imgui_webgl.cc"],
     deps = [
