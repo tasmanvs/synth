@@ -1,9 +1,10 @@
 #pragma once
 
 #include "imgui.h"
+#include "implot.h"
 #include "imgui_node_editor.h"
-#include "audio/audio_synth.h"
 #include "audio/audio_interface.h"
+#include "audio_loop/sine_buffer_generator.h"
 #include <vector>
 #include <memory>
 #include <map>
@@ -68,10 +69,11 @@ public:
 private:
     float frequency_;
     float volume_;
-    float phase_;  // Track phase for continuous audio generation
     float last_frequency_;
     float last_volume_;
     bool parameters_changed_;
+    audio_loop::BufferConfig buffer_config_;
+    audio_loop::PhaseContinuousSine phase_generator_;
 };
 
 // Sum node: Adds the output of two input nodes
@@ -115,6 +117,15 @@ private:
     AudioInterface* audio_interface_;
     bool playing_;
     float volume_;
+    std::vector<float> playback_history_;
+    size_t history_limit_samples_;
+    bool show_debug_window_;
+    std::vector<float> plot_scratch_buffer_;
+    size_t max_plot_samples_;
+
+    void AppendToHistory(const std::vector<float>& samples);
+    void DrawHistoryWindow();
+    const float* PreparePlotData(int* sample_count);
 };
 
 // Audio node graph manager

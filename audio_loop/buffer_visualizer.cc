@@ -19,11 +19,13 @@ namespace {
 
 constexpr float kTwoPi = 6.28318530717958647692f;
 constexpr int kMinBufferCount = 2;
-constexpr int kMaxBufferCount = 6;
+constexpr int kMaxBufferCount = 60;
 constexpr int kMinFrameCount = 32;
 constexpr int kMaxFrameCount = 4096;
 constexpr int kMinSampleRate = 8000;
 constexpr int kMaxSampleRate = 96000;
+constexpr int kMinStreamQueue = 1;
+constexpr int kMaxStreamQueue = 16;
 
 struct VisualizerState {
     audio_loop::BufferConfig config;
@@ -42,6 +44,11 @@ struct VisualizerState {
     bool audio_ready = false;
     bool audio_failed = false;
     std::string audio_message;
+    bool stream_active = false;
+    bool stream_generator_initialized = false;
+    int stream_queue_target = 4;
+    audio_loop::PhaseContinuousSine stream_generator;
+    std::vector<float> stream_chunk;
 };
 
 void RegenerateBuffers(VisualizerState* state) {
@@ -71,6 +78,10 @@ void RegenerateBuffers(VisualizerState* state) {
 
     state->generator = generator;
     state->concatenated = audio_loop::ConcatenateBuffers(state->buffers);
+    if (!state->stream_active) {
+        state->stream_generator = audio_loop::PhaseContinuousSine(state->start_phase);
+        state->stream_generator_initialized = false;
+    }
 }
 
 bool EnsureAudioInitialized(VisualizerState* state) {
@@ -88,6 +99,73 @@ bool EnsureAudioInitialized(VisualizerState* state) {
     state->audio_ready = false;
     state->audio_message = "Failed to initialize XAudio2. Install the latest DirectX runtime.";
     return false;
+}
+
+bool AppendGeneratedChunk(VisualizerState* state) {
+    if (!EnsureAudioInitialized(state)) {
+        return false;
+    }
+
+    if (!state->stream_generator_initialized) {
+        state->stream_generator.ResetPhase(state->start_phase);
+        state->stream_generator_initialized = true;
+    }
+
+    state->stream_chunk = state->stream_generator.GenerateBuffer(state->config);
+    if (state->stream_chunk.empty()) {
+        state->audio_message = "Generator produced an empty buffer.";
+        return false;
+    }
+
+    if (!state->audio_player.Append(state->stream_chunk, state->config.sample_rate)) {
+        state->audio_message = "Failed to append audio chunk to queue.";
+        return false;
+    }
+
+    return true;
+}
+
+bool StartContinuousStream(VisualizerState* state) {
+    if (!EnsureAudioInitialized(state)) {
+        return false;
+    }
+
+    state->audio_player.Stop();
+    state->stream_active = true;
+
+    const int target = std::max(kMinStreamQueue, std::min(state->stream_queue_target, kMaxStreamQueue));
+    for (int i = 0; i < target; ++i) {
+        if (!AppendGeneratedChunk(state)) {
+            state->stream_active = false;
+            state->audio_player.Stop();
+            return false;
+        }
+    }
+
+    state->audio_message = "Continuous stream started.";
+    return true;
+}
+
+void StopContinuousStream(VisualizerState* state) {
+    state->stream_active = false;
+    state->audio_player.Stop();
+}
+
+void UpdateContinuousStream(VisualizerState* state) {
+    if (!state->stream_active) {
+        return;
+    }
+
+    int queued = state->audio_player.GetQueuedBufferCount();
+    const int target = std::max(kMinStreamQueue, std::min(state->stream_queue_target, kMaxStreamQueue));
+    while (queued < target) {
+        if (!AppendGeneratedChunk(state)) {
+            state->stream_active = false;
+            state->audio_player.Stop();
+            return;
+        }
+        ++queued;
+    }
 }
 
 void DrawPlaybackSection(VisualizerState* state) {
@@ -111,6 +189,7 @@ void DrawPlaybackSection(VisualizerState* state) {
     const bool has_samples = !state->concatenated.empty();
     ImGui::BeginDisabled(!has_samples);
     if (ImGui::Button("Play Buffers")) {
+        StopContinuousStream(state);
         if (state->audio_player.Play(state->concatenated, state->config.sample_rate)) {
             state->audio_message = "Playing concatenated buffer.";
         } else {
@@ -120,7 +199,7 @@ void DrawPlaybackSection(VisualizerState* state) {
     ImGui::EndDisabled();
     ImGui::SameLine();
     if (ImGui::Button("Stop Playback")) {
-        state->audio_player.Stop();
+        StopContinuousStream(state);
         state->audio_message = "Playback stopped.";
     }
 
@@ -128,6 +207,43 @@ void DrawPlaybackSection(VisualizerState* state) {
     if (!state->audio_message.empty()) {
         ImGui::TextWrapped("%s", state->audio_message.c_str());
     }
+
+    ImGui::Separator();
+    ImGui::Text("Continuous Streaming");
+    if (state->stream_queue_target < kMinStreamQueue) {
+        state->stream_queue_target = kMinStreamQueue;
+    }
+    if (state->stream_queue_target > kMaxStreamQueue) {
+        state->stream_queue_target = kMaxStreamQueue;
+    }
+    ImGui::SliderInt("Queued Buffers Target", &state->stream_queue_target,
+                     kMinStreamQueue, kMaxStreamQueue);
+
+    ImGui::BeginDisabled(!state->audio_ready);
+    if (!state->stream_active) {
+        if (ImGui::Button("Start Continuous Stream")) {
+            if (!StartContinuousStream(state)) {
+                state->audio_message = "Failed to start continuous stream.";
+            }
+        }
+    } else {
+        if (ImGui::Button("Stop Continuous Stream")) {
+            StopContinuousStream(state);
+            state->audio_message = "Continuous stream stopped.";
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Append One Chunk")) {
+        if (!AppendGeneratedChunk(state)) {
+            if (state->audio_message.empty()) {
+                state->audio_message = "Failed to append chunk.";
+            }
+        } else {
+            state->audio_message = "Appended chunk to queue.";
+        }
+    }
+    ImGui::EndDisabled();
+    ImGui::Text("Queued buffers: %d", state->audio_player.GetQueuedBufferCount());
 }
 
 // DirectX state copied from //examples:imgui_dx11
@@ -162,6 +278,11 @@ void DrawControlPanel(VisualizerState* state, bool* needs_regenerate) {
         sample_rate = std::min(sample_rate, kMaxSampleRate);
         state->config.sample_rate = sample_rate;
         *needs_regenerate = true;
+        if (state->stream_active) {
+            StopContinuousStream(state);
+            state->stream_generator_initialized = false;
+            state->audio_message = "Continuous stream stopped due to sample rate change.";
+        }
     }
 
     int frame_count = state->config.frame_count;
@@ -176,8 +297,12 @@ void DrawControlPanel(VisualizerState* state, bool* needs_regenerate) {
         *needs_regenerate = true;
     }
 
-    *needs_regenerate |=
+    bool start_phase_changed =
         ImGui::SliderFloat("Start Phase", &state->start_phase, 0.0f, kTwoPi);
+    if (start_phase_changed) {
+        *needs_regenerate = true;
+        state->stream_generator_initialized = false;
+    }
 
     ImGui::Checkbox("Auto Refresh", &state->auto_refresh);
     ImGui::Checkbox("Show Concatenated View", &state->show_combined);
@@ -222,7 +347,7 @@ void DrawPlot(const VisualizerState& state) {
         ImPlot::SetupAxes("Sample index", "Amplitude",
                           ImPlotAxisFlags_NoGridLines,
                           ImPlotAxisFlags_NoGridLines);
-        ImPlot::SetupAxesLimits(0.0, total_samples, -1.1, 1.1, ImPlotCond_Always);
+        ImPlot::SetupAxesLimits(0.0, total_samples, -1.1, 1.1, ImPlotCond_Once);
 
         for (size_t i = 0; i < state.buffers.size(); ++i) {
             const auto& buffer = state.buffers[i];
@@ -330,6 +455,7 @@ int main(int, char**) {
         bool needs_regenerate = false;
         DrawControlPanel(&state, &needs_regenerate);
         DrawPlot(state);
+        UpdateContinuousStream(&state);
 
         if (state.auto_refresh || needs_regenerate) {
             RegenerateBuffers(&state);

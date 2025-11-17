@@ -1,11 +1,6 @@
 #include "audio/audio_node_graph.h"
 #include "absl/log/log.h"
-#include <cmath>
 #include <algorithm>
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 namespace audio_nodes {
 
@@ -27,29 +22,27 @@ SourceNode::SourceNode(int node_id)
     : AudioNode(node_id, NodeType::kSource)
     , frequency_(440.0f)
     , volume_(0.5f)
-    , phase_(0.0f)
     , last_frequency_(440.0f)
     , last_volume_(0.5f)
-    , parameters_changed_(false) {
+    , parameters_changed_(false)
+    , phase_generator_(0.0f) {
+    buffer_config_.frequency_hz = frequency_;
+    buffer_config_.amplitude = volume_;
+    buffer_config_.sample_rate = 48000;
+    buffer_config_.frame_count = 512;
 }
 
 std::vector<float> SourceNode::GenerateAudio(int num_samples, int sample_rate) {
-    std::vector<float> output(num_samples);
-    
-    // Generate continuous audio using phase accumulation
-    float phase_increment = 2.0f * M_PI * frequency_ / sample_rate;
-    
-    for (int i = 0; i < num_samples; i++) {
-        output[i] = std::sin(phase_) * volume_;
-        
-        // Increment phase and wrap to prevent accumulation errors
-        phase_ += phase_increment;
-        if (phase_ >= 2.0f * M_PI) {
-            phase_ -= 2.0f * M_PI;
-        }
+    if (num_samples <= 0 || sample_rate <= 0) {
+        return {};
     }
-    
-    return output;
+
+    buffer_config_.frame_count = num_samples;
+    buffer_config_.sample_rate = sample_rate;
+    buffer_config_.frequency_hz = frequency_;
+    buffer_config_.amplitude = volume_;
+
+    return phase_generator_.GenerateBuffer(buffer_config_);
 }
 
 void SourceNode::Draw() {
@@ -184,7 +177,12 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , input_(nullptr)
     , audio_interface_(audio_interface)
     , playing_(false)
-    , volume_(0.5f) {
+    , volume_(0.5f)
+    , playback_history_()
+    , history_limit_samples_(48000 * 5)
+    , show_debug_window_(false)
+    , plot_scratch_buffer_()
+    , max_plot_samples_(16000) {
 }
 
 std::vector<float> PlayerNode::GenerateAudio(int num_samples, int sample_rate) {
@@ -216,9 +214,19 @@ void PlayerNode::Draw() {
     ImGui::PushItemWidth(100.0f);
     ImGui::SliderFloat("Master", &volume_, 0.0f, 1.0f, "%.2f");
     ImGui::PopItemWidth();
+
+    if (ImGui::Button("Show Buffer Debug")) {
+        show_debug_window_ = true;
+    }
     
     ed::EndNode();
     ImGui::PopID();
+
+    if (show_debug_window_) {
+        ed::Suspend();
+        DrawHistoryWindow();
+        ed::Resume();
+    }
 }
 
 bool PlayerNode::AddInput(AudioNode* input_node) {
@@ -260,6 +268,8 @@ void PlayerNode::UpdateAudio(int sample_rate) {
     for (auto& sample : audio_data) {
         sample *= volume_;
     }
+
+    AppendToHistory(audio_data);
     
     // Convert float to short (16-bit PCM)
     std::vector<short> short_data(buffer_size);
@@ -273,6 +283,100 @@ void PlayerNode::UpdateAudio(int sample_rate) {
     audio_interface_->stop();
     audio_interface_->playSamples(short_data, sample_rate, true);
     audio_interface_->play();
+}
+
+void PlayerNode::AppendToHistory(const std::vector<float>& samples) {
+    if (samples.empty()) {
+        return;
+    }
+
+    playback_history_.insert(playback_history_.end(), samples.begin(), samples.end());
+
+    if (playback_history_.size() > history_limit_samples_) {
+        size_t excess = playback_history_.size() - history_limit_samples_;
+        playback_history_.erase(playback_history_.begin(), playback_history_.begin() + excess);
+    }
+}
+
+void PlayerNode::DrawHistoryWindow() {
+    if (!show_debug_window_) {
+        return;
+    }
+
+    if (!ImGui::Begin("Player Buffer Debug", &show_debug_window_)) {
+        ImGui::End();
+        return;
+    }
+
+    if (playback_history_.empty()) {
+        ImGui::Text("No buffers captured yet.");
+        ImGui::End();
+        return;
+    }
+
+    if (ImGui::Button("Clear History")) {
+        playback_history_.clear();
+    }
+    ImGui::SameLine();
+    ImGui::Text("Captured samples: %zu", playback_history_.size());
+
+    int sample_count = 0;
+    const float* plot_data = PreparePlotData(&sample_count);
+    if (!plot_data || sample_count <= 0) {
+        ImGui::Text("No data available for plotting.");
+        ImGui::End();
+        return;
+    }
+
+    ImGui::Text("Plotting %d points (downsampled from %zu)", sample_count,
+                playback_history_.size());
+
+    if (ImPlot::BeginPlot("Captured Buffers", ImVec2(-1, -1))) {
+        ImPlot::SetupAxes("Sample", "Amplitude",
+                          ImPlotAxisFlags_NoGridLines,
+                          ImPlotAxisFlags_NoGridLines);
+        ImPlot::SetupAxesLimits(0.0,
+                                static_cast<double>(sample_count),
+                                -1.1,
+                                1.1,
+                                ImPlotCond_Always);
+        ImPlot::PlotLine("History",
+                         plot_data,
+                         sample_count);
+        ImPlot::EndPlot();
+    }
+
+    ImGui::End();
+}
+
+const float* PlayerNode::PreparePlotData(int* sample_count) {
+    if (sample_count == nullptr) {
+        return nullptr;
+    }
+
+    if (playback_history_.empty()) {
+        *sample_count = 0;
+        return nullptr;
+    }
+
+    if (playback_history_.size() <= max_plot_samples_) {
+        *sample_count = static_cast<int>(playback_history_.size());
+        return playback_history_.data();
+    }
+
+    const size_t stride =
+        (playback_history_.size() + max_plot_samples_ - 1) / max_plot_samples_;
+    const size_t downsampled_count =
+        (playback_history_.size() + stride - 1) / stride;
+    plot_scratch_buffer_.resize(downsampled_count);
+
+    size_t idx = 0;
+    for (size_t i = 0; i < playback_history_.size(); i += stride) {
+        plot_scratch_buffer_[idx++] = playback_history_[i];
+    }
+
+    *sample_count = static_cast<int>(idx);
+    return plot_scratch_buffer_.data();
 }
 
 // ============================================================================
@@ -289,7 +393,6 @@ AudioNodeGraph::AudioNodeGraph(AudioInterface* audio_interface)
     
     // Initialize node editor
     ax::NodeEditor::Config config;
-    config.SettingsFile = "AudioNodes.json";
     editor_context_ = ax::NodeEditor::CreateEditor(&config);
     
     LOG(INFO) << "AudioNodeGraph created";
@@ -306,7 +409,6 @@ SourceNode* AudioNodeGraph::CreateSourceNode() {
     int node_id = next_node_id_++;
     auto node = std::make_unique<SourceNode>(node_id);
     auto* node_ptr = node.get();
-    
     RegisterPin(node_ptr->GetOutputPinId(), node_id);
     
     nodes_[node_id] = std::move(node);
