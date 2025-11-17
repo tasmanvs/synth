@@ -83,28 +83,24 @@ bool SourceNode::HasParametersChanged() {
 // SumNode Implementation
 // ============================================================================
 
-SumNode::SumNode(int node_id)
+SumNode::SumNode(int node_id, AudioNodeGraph* graph)
     : AudioNode(node_id, NodeType::kSum)
-    , input_pin_a_id_(node_id * 100 + 2)
-    , input_pin_b_id_(node_id * 100 + 3)
-    , input_a_(nullptr)
-    , input_b_(nullptr) {
+    , graph_(graph)
+    , next_pin_offset_(0) {
+    AddInputSlot();
+    AddInputSlot();
 }
 
 std::vector<float> SumNode::GenerateAudio(int num_samples, int sample_rate) {
     std::vector<float> output(num_samples, 0.0f);
     
-    if (input_a_) {
-        auto input_a_data = input_a_->GenerateAudio(num_samples, sample_rate);
-        for (int i = 0; i < num_samples; i++) {
-            output[i] += input_a_data[i];
+    for (const auto& slot : inputs_) {
+        if (!slot.input) {
+            continue;
         }
-    }
-    
-    if (input_b_) {
-        auto input_b_data = input_b_->GenerateAudio(num_samples, sample_rate);
-        for (int i = 0; i < num_samples; i++) {
-            output[i] += input_b_data[i];
+        auto input_data = slot.input->GenerateAudio(num_samples, sample_rate);
+        for (int i = 0; i < num_samples && i < static_cast<int>(input_data.size()); ++i) {
+            output[i] += input_data[i];
         }
     }
     
@@ -125,14 +121,49 @@ void SumNode::Draw() {
     ImGui::Text("Sum Node %d", node_id_);
     
     // Input pins
-    ed::BeginPin(input_pin_a_id_, ed::PinKind::Input);
-    ImGui::Text("-> A");
-    ed::EndPin();
-    
-    ed::BeginPin(input_pin_b_id_, ed::PinKind::Input);
-    ImGui::Text("-> B");
-    ed::EndPin();
-    
+    int slot_index = 1;
+    InputSlot* first_free_slot = nullptr;
+    for (auto& slot : inputs_) {
+        if (!slot.input && !first_free_slot) {
+            first_free_slot = &slot;
+        }
+        ed::BeginPin(slot.pin_id, ed::PinKind::Input);
+        ImGui::Text("-> In %d", slot_index++);
+        ed::EndPin();
+    }
+
+    if (ImGui::Button("Add Input Slot")) {
+        AddInputSlot();
+    }
+
+    bool can_spawn = graph_ != nullptr;
+    if (!first_free_slot && graph_) {
+        if (AddInputSlot()) {
+            first_free_slot = &inputs_.back();
+        } else {
+            can_spawn = false;
+        }
+    }
+
+    ImGui::SameLine();
+    if (!can_spawn || !first_free_slot) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Spawn Source")) {
+        if (graph_) {
+            SourceNode* new_source = graph_->CreateSourceNode();
+            if (new_source && first_free_slot) {
+                int start_pin = new_source->GetOutputPinId();
+                if (!graph_->CreateLink(start_pin, first_free_slot->pin_id)) {
+                    LOG(WARNING) << "Failed to link new source to sum node " << node_id_;
+                }
+            }
+        }
+    }
+    if (!can_spawn || !first_free_slot) {
+        ImGui::EndDisabled();
+    }
+
     ImGui::Text("  +  ");
     
     // Output pin
@@ -144,27 +175,81 @@ void SumNode::Draw() {
     ImGui::PopID();
 }
 
-bool SumNode::AddInput(AudioNode* input_node) {
-    if (!input_node) return false;
-    
-    if (!input_a_) {
-        input_a_ = input_node;
-        return true;
-    } else if (!input_b_) {
-        input_b_ = input_node;
-        return true;
+bool SumNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (!input_node) {
+        return false;
     }
-    
-    return false;
+
+    InputSlot* target = nullptr;
+    if (pin_id >= 0) {
+        target = FindSlotByPin(pin_id);
+        if (target && target->input != nullptr) {
+            target = nullptr;
+        }
+    }
+    if (!target) {
+        for (auto& slot : inputs_) {
+            if (slot.input == nullptr) {
+                target = &slot;
+                break;
+            }
+        }
+    }
+
+    if (!target) {
+        if (!AddInputSlot()) {
+            return false;
+        }
+        target = &inputs_.back();
+    }
+
+    if (target->input != nullptr) {
+        return false;
+    }
+
+    target->input = input_node;
+    return true;
 }
 
-void SumNode::RemoveInput(AudioNode* input_node) {
-    if (input_a_ == input_node) {
-        input_a_ = nullptr;
+void SumNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    InputSlot* target = nullptr;
+    if (pin_id >= 0) {
+        target = FindSlotByPin(pin_id);
     }
-    if (input_b_ == input_node) {
-        input_b_ = nullptr;
+
+    if (!target) {
+        for (auto& slot : inputs_) {
+            if (slot.input == input_node) {
+                target = &slot;
+                break;
+            }
+        }
     }
+
+    if (target) {
+        target->input = nullptr;
+    }
+}
+
+SumNode::InputSlot* SumNode::FindSlotByPin(int pin_id) {
+    for (auto& slot : inputs_) {
+        if (slot.pin_id == pin_id) {
+            return &slot;
+        }
+    }
+    return nullptr;
+}
+
+bool SumNode::AddInputSlot() {
+    if (!graph_) {
+        return false;
+    }
+
+    int pin_id = node_id_ * 100 + 2 + next_pin_offset_;
+    next_pin_offset_++;
+    inputs_.push_back({pin_id, nullptr});
+    graph_->RegisterPin(pin_id, node_id_);
+    return true;
 }
 
 // ============================================================================
@@ -241,7 +326,7 @@ void PlayerNode::Draw() {
     }
 }
 
-bool PlayerNode::AddInput(AudioNode* input_node) {
+bool PlayerNode::AddInput(AudioNode* input_node, int /*pin_id*/) {
     if (!input_node) return false;
     
     if (!input_) {
@@ -252,7 +337,7 @@ bool PlayerNode::AddInput(AudioNode* input_node) {
     return false;
 }
 
-void PlayerNode::RemoveInput(AudioNode* input_node) {
+void PlayerNode::RemoveInput(AudioNode* input_node, int /*pin_id*/) {
     if (input_ == input_node) {
         input_ = nullptr;
     }
@@ -475,7 +560,7 @@ SourceNode* AudioNodeGraph::CreateSourceNode() {
 
 SumNode* AudioNodeGraph::CreateSumNode() {
     int node_id = next_node_id_++;
-    auto node = std::make_unique<SumNode>(node_id);
+    auto node = std::make_unique<SumNode>(node_id, this);
     auto* node_ptr = node.get();
     
     RegisterPin(node_ptr->GetOutputPinId(), node_id);
@@ -560,7 +645,7 @@ bool AudioNodeGraph::CreateLink(int start_pin_id, int end_pin_id) {
     }
     
     // Add the input connection
-    if (!end_node->AddInput(start_node)) {
+    if (!end_node->AddInput(start_node, end_pin_id)) {
         LOG(WARNING) << "Failed to add input to node";
         return false;
     }
@@ -587,7 +672,7 @@ void AudioNodeGraph::DeleteLink(int link_id) {
     AudioNode* end_node = GetNodeForPin(it->end_pin_id);
     
     if (start_node && end_node) {
-        end_node->RemoveInput(start_node);
+        end_node->RemoveInput(start_node, it->end_pin_id);
     }
     
     links_.erase(it);

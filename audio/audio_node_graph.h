@@ -16,6 +16,7 @@ class AudioNode;
 class SourceNode;
 class SumNode;
 class PlayerNode;
+class AudioNodeGraph;
 
 // Audio node types
 enum class NodeType {
@@ -37,8 +38,8 @@ public:
     virtual void Draw() = 0;
     
     // Connect an input (for nodes that accept inputs)
-    virtual bool AddInput(AudioNode* input_node) { return false; }
-    virtual void RemoveInput(AudioNode* input_node) {}
+    virtual bool AddInput(AudioNode* input_node, int pin_id = -1) { return false; }
+    virtual void RemoveInput(AudioNode* input_node, int pin_id = -1) {}
     
     int GetNodeId() const { return node_id_; }
     NodeType GetNodeType() const { return type_; }
@@ -76,22 +77,29 @@ private:
     audio_loop::PhaseContinuousSine phase_generator_;
 };
 
-// Sum node: Adds the output of two input nodes
+// Sum node: Adds the output of one or more input nodes
 class SumNode : public AudioNode {
 public:
-    SumNode(int node_id);
+    SumNode(int node_id, AudioNodeGraph* graph);
     
     std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
     void Draw() override;
     
-    bool AddInput(AudioNode* input_node) override;
-    void RemoveInput(AudioNode* input_node) override;
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
     
 private:
-    int input_pin_a_id_;
-    int input_pin_b_id_;
-    AudioNode* input_a_;
-    AudioNode* input_b_;
+    struct InputSlot {
+        int pin_id;
+        AudioNode* input;
+    };
+
+    std::vector<InputSlot> inputs_;
+    AudioNodeGraph* graph_;
+    int next_pin_offset_;
+
+    InputSlot* FindSlotByPin(int pin_id);
+    bool AddInputSlot();
 };
 
 // Player node: Outputs audio to speakers (singleton)
@@ -102,8 +110,8 @@ public:
     std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
     void Draw() override;
     
-    bool AddInput(AudioNode* input_node) override;
-    void RemoveInput(AudioNode* input_node) override;
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
     
     void SetPlaying(bool playing);
     bool IsPlaying() const { return playing_; }
@@ -191,6 +199,8 @@ private:
     
     void RegisterPin(int pin_id, int node_id);
     void UnregisterPinsForNode(int node_id);
+
+    friend class SumNode;
 };
 
 } // namespace audio_nodes
