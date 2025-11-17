@@ -513,7 +513,7 @@ void PlayerNode::DrawHistoryWindow() {
                                 static_cast<double>(sample_count),
                                 -1.1,
                                 1.1,
-                                ImPlotCond_Always);
+                                ImPlotCond_Once);
         ImPlot::PlotLine("History",
                          plot_data,
                          sample_count);
