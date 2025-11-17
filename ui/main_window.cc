@@ -61,13 +61,13 @@ void MainWindow::Update()
             auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
             
             // Play using audio interface
-            audio_interface_.playSamples(samples, sample_rate_, true);
-            audio_interface_.play();
+            audio_interface_.PlaySamples(samples, sample_rate_, true);
+            audio_interface_.Play();
         }
         else
         {
             LOG(INFO) << "Stopping audio tone";
-            audio_interface_.stop();
+            audio_interface_.Stop();
         }
         was_playing = playing_;
         last_frequency = frequency_;
@@ -78,14 +78,14 @@ void MainWindow::Update()
         LOG(INFO) << "Updating tone: frequency=" << frequency_ << " Hz, volume=" << volume_;
         
         // Stop current playback
-        audio_interface_.stop();
+    audio_interface_.Stop();
         
         // Generate new waveform
         auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
         
         // Play new waveform
-        audio_interface_.playSamples(samples, sample_rate_, true);
-        audio_interface_.play();
+    audio_interface_.PlaySamples(samples, sample_rate_, true);
+    audio_interface_.Play();
         
         last_frequency = frequency_;
         last_volume = volume_;
@@ -131,7 +131,7 @@ void MainWindow::Draw()
         // Show waveform from audio interface
         if (playing_)
         {
-            const auto& samples = audio_interface_.getCurrentSamples();
+            const auto& samples = audio_interface_.GetCurrentSamples();
             if (!samples.empty())
             {
                 // Convert short samples to float for visualization

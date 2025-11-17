@@ -182,7 +182,11 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , history_limit_samples_(48000 * 5)
     , show_debug_window_(false)
     , plot_scratch_buffer_()
-    , max_plot_samples_(16000) {
+    , max_plot_samples_(16000)
+    , pcm_convert_buffer_()
+    , streaming_buffer_size_(2048)
+    , max_queue_buffers_(6)
+    , needs_stream_prime_(true) {
 }
 
 std::vector<float> PlayerNode::GenerateAudio(int num_samples, int sample_rate) {
@@ -212,8 +216,16 @@ void PlayerNode::Draw() {
     }
     
     ImGui::PushItemWidth(100.0f);
-    ImGui::SliderFloat("Master", &volume_, 0.0f, 1.0f, "%.2f");
+    if (ImGui::SliderFloat("Master", &volume_, 0.0f, 1.0f, "%.2f")) {
+        if (audio_interface_ && playing_) {
+            audio_interface_->SetVolume(volume_);
+        }
+    }
     ImGui::PopItemWidth();
+
+    if (audio_interface_) {
+        ImGui::Text("Queued buffers: %d", audio_interface_->GetQueuedBufferCount());
+    }
 
     if (ImGui::Button("Show Buffer Debug")) {
         show_debug_window_ = true;
@@ -246,43 +258,87 @@ void PlayerNode::RemoveInput(AudioNode* input_node) {
     }
 }
 
+void PlayerNode::OnGraphChanged() {
+    needs_stream_prime_ = true;
+}
+
 void PlayerNode::SetPlaying(bool playing) {
-    playing_ = playing;
-    
-    if (!playing_) {
-        audio_interface_->stop();
-        LOG(INFO) << "Player node stopped";
-    } else {
-        LOG(INFO) << "Player node started";
+    if (playing_ == playing) {
+        return;
     }
+
+    playing_ = playing;
+
+    if (!audio_interface_) {
+        return;
+    }
+
+    if (!playing_) {
+        audio_interface_->Stop();
+        needs_stream_prime_ = true;
+        LOG(INFO) << "Player node stopped";
+        return;
+    }
+
+    audio_interface_->Stop();
+    audio_interface_->SetVolume(volume_);
+    needs_stream_prime_ = true;
+    LOG(INFO) << "Player node started";
 }
 
 void PlayerNode::UpdateAudio(int sample_rate) {
-    if (!playing_ || !audio_interface_) return;
-    
-    // Generate a buffer of audio with current parameters
-    const int buffer_size = sample_rate / 10;  // 100ms buffer
+    if (!audio_interface_) {
+        return;
+    }
+
+    audio_interface_->ServiceStreamingQueue();
+
+    if (!playing_) {
+        return;
+    }
+
+    UpdateStreaming(sample_rate);
+}
+
+void PlayerNode::UpdateStreaming(int sample_rate) {
+    if (!audio_interface_) {
+        return;
+    }
+
+    if (needs_stream_prime_) {
+        audio_interface_->ClearStreamingQueue();
+        needs_stream_prime_ = false;
+    }
+
+    audio_interface_->SetVolume(volume_);
+
+    while (audio_interface_->GetQueuedBufferCount() < max_queue_buffers_) {
+        if (!QueueGeneratedAudio(sample_rate)) {
+            break;
+        }
+    }
+}
+
+bool PlayerNode::QueueGeneratedAudio(int sample_rate) {
+    const int buffer_size = streaming_buffer_size_ > 0 ? streaming_buffer_size_ : 1024;
     auto audio_data = GenerateAudio(buffer_size, sample_rate);
-    
-    // Apply master volume
+    if (audio_data.empty()) {
+        return false;
+    }
+
     for (auto& sample : audio_data) {
         sample *= volume_;
+        sample = std::max(-1.0f, std::min(1.0f, sample));
     }
 
     AppendToHistory(audio_data);
-    
-    // Convert float to short (16-bit PCM)
-    std::vector<short> short_data(buffer_size);
-    for (int i = 0; i < buffer_size; i++) {
-        float clamped = std::max(-1.0f, std::min(1.0f, audio_data[i]));
-        short_data[i] = static_cast<short>(clamped * 32767.0f);
+
+    pcm_convert_buffer_.resize(audio_data.size());
+    for (size_t i = 0; i < audio_data.size(); ++i) {
+        pcm_convert_buffer_[i] = static_cast<short>(audio_data[i] * 32767.0f);
     }
-    
-    // Stop current audio, update buffer, and restart
-    // This is necessary because OpenAL doesn't allow buffer updates while playing
-    audio_interface_->stop();
-    audio_interface_->playSamples(short_data, sample_rate, true);
-    audio_interface_->play();
+
+    return audio_interface_->AppendSamples(pcm_convert_buffer_, sample_rate, false);
 }
 
 void PlayerNode::AppendToHistory(const std::vector<float>& samples) {
@@ -564,14 +620,15 @@ bool AudioNodeGraph::IsPinOutput(int pin_id) {
 }
 
 void AudioNodeGraph::Update(int sample_rate) {
-    // Update player node audio if it exists and is playing
-    if (player_node_ && player_node_->IsPlaying()) {
-        // Check if any parameters have changed
-        if (HasGraphChanged()) {
-            // Force audio update
-            player_node_->UpdateAudio(sample_rate);
-        }
+    if (!player_node_) {
+        return;
     }
+
+    if (player_node_->IsPlaying() && HasGraphChanged()) {
+        player_node_->OnGraphChanged();
+    }
+
+    player_node_->UpdateAudio(sample_rate);
 }
 
 bool AudioNodeGraph::HasGraphChanged() {

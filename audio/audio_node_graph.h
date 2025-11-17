@@ -110,6 +110,7 @@ public:
     
     // Update the audio output (call this regularly)
     void UpdateAudio(int sample_rate);
+    void OnGraphChanged();
     
 private:
     int input_pin_id_;
@@ -122,10 +123,16 @@ private:
     bool show_debug_window_;
     std::vector<float> plot_scratch_buffer_;
     size_t max_plot_samples_;
+    std::vector<short> pcm_convert_buffer_;
+    int streaming_buffer_size_;
+    int max_queue_buffers_;
+    bool needs_stream_prime_;
 
     void AppendToHistory(const std::vector<float>& samples);
     void DrawHistoryWindow();
     const float* PreparePlotData(int* sample_count);
+    void UpdateStreaming(int sample_rate);
+    bool QueueGeneratedAudio(int sample_rate);
 };
 
 // Audio node graph manager

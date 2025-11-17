@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <vector>
 
 // Interface for audio playback using OpenAL
@@ -10,31 +11,44 @@ public:
     ~AudioInterface();
 
     // Initialize the audio system
-    bool init();
+    bool Init();
 
     // Play audio samples (mono, 16-bit, at given sample rate)
-    void playSamples(const std::vector<short>& samples, int sampleRate, bool looping);
+    void PlaySamples(const std::vector<short>& samples, int sample_rate, bool looping);
 
     // Start playback
-    void play();
+    void Play();
 
     // Stop playback
-    void stop();
+    void Stop();
 
     // Update volume (0.0 to 1.0)
-    void setVolume(float volume);
+    void SetVolume(float volume);
+
+    // Streaming queue helpers
+    bool AppendSamples(const std::vector<short>& samples, int sample_rate, bool end_stream);
+    void ServiceStreamingQueue();
+    void ClearStreamingQueue();
+    int GetQueuedBufferCount() const;
 
     // Check if currently playing
-    bool isPlaying() const { return m_isPlaying; }
+    bool IsPlaying() const { return is_playing_; }
 
     // Get the current buffer samples for visualization
-    const std::vector<short>& getCurrentSamples() const { return m_currentSamples; }
+    const std::vector<short>& GetCurrentSamples() const { return current_samples_; }
 
 private:
-    void* m_device;
-    void* m_context;
-    unsigned int m_source;
-    unsigned int m_buffer;
-    bool m_isPlaying;
-    std::vector<short> m_currentSamples;  // Store current buffer for visualization
+    bool QueueStreamingBuffer(const std::vector<short>& samples, int sample_rate);
+    void UnqueueProcessedBuffers();
+    void DeleteAllQueuedBuffers();
+
+    void* device_;
+    void* context_;
+    unsigned int source_;
+    unsigned int buffer_;
+    bool is_playing_;
+    std::vector<short> current_samples_;  // Store current buffer for visualization
+    std::deque<unsigned int> queued_buffers_;
+    bool streaming_end_pending_;
+    int streaming_sample_rate_;
 };
