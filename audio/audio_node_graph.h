@@ -135,12 +135,20 @@ private:
     int streaming_buffer_size_;
     int max_queue_buffers_;
     bool needs_stream_prime_;
+    std::vector<float> capture_buffer_;
+    size_t capture_target_samples_;
+    size_t capture_samples_collected_;
+    bool capture_active_;
+    bool capture_ready_;
+    int capture_target_input_;
 
     void AppendToHistory(const std::vector<float>& samples);
     void DrawHistoryWindow();
-    const float* PreparePlotData(int* sample_count);
+    const float* PreparePlotData(const std::vector<float>& samples, int* sample_count);
     void UpdateStreaming(int sample_rate);
     bool QueueGeneratedAudio(int sample_rate);
+    void StartCapture();
+    void AppendCaptureSamples(const std::vector<float>& samples);
 };
 
 // Audio node graph manager

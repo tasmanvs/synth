@@ -271,7 +271,13 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , pcm_convert_buffer_()
     , streaming_buffer_size_(2048)
     , max_queue_buffers_(6)
-    , needs_stream_prime_(true) {
+    , needs_stream_prime_(true)
+    , capture_buffer_()
+    , capture_target_samples_(48000)
+    , capture_samples_collected_(0)
+    , capture_active_(false)
+    , capture_ready_(false)
+    , capture_target_input_(48000) {
 }
 
 std::vector<float> PlayerNode::GenerateAudio(int num_samples, int sample_rate) {
@@ -437,6 +443,8 @@ void PlayerNode::AppendToHistory(const std::vector<float>& samples) {
         size_t excess = playback_history_.size() - history_limit_samples_;
         playback_history_.erase(playback_history_.begin(), playback_history_.begin() + excess);
     }
+
+    AppendCaptureSamples(samples);
 }
 
 void PlayerNode::DrawHistoryWindow() {
@@ -455,14 +463,39 @@ void PlayerNode::DrawHistoryWindow() {
         return;
     }
 
-    if (ImGui::Button("Clear History")) {
-        playback_history_.clear();
+    ImGui::InputInt("Capture Samples", &capture_target_input_);
+    if (capture_target_input_ < 1) {
+        capture_target_input_ = 1;
+    }
+
+    if (ImGui::Button("Start Capture")) {
+        StartCapture();
     }
     ImGui::SameLine();
-    ImGui::Text("Captured samples: %zu", playback_history_.size());
+    if (ImGui::Button("Clear Capture")) {
+        capture_buffer_.clear();
+        capture_samples_collected_ = 0;
+        capture_active_ = false;
+        capture_ready_ = false;
+    }
+
+    if (capture_active_) {
+        ImGui::Text("Capturing... %zu / %zu samples",
+                    capture_samples_collected_, capture_target_samples_);
+    } else if (capture_ready_) {
+        ImGui::Text("Capture complete: %zu samples", capture_buffer_.size());
+    } else {
+        ImGui::Text("Capture idle");
+    }
+
+    if (capture_buffer_.empty()) {
+        ImGui::Text("No captured samples yet.");
+        ImGui::End();
+        return;
+    }
 
     int sample_count = 0;
-    const float* plot_data = PreparePlotData(&sample_count);
+    const float* plot_data = PreparePlotData(capture_buffer_, &sample_count);
     if (!plot_data || sample_count <= 0) {
         ImGui::Text("No data available for plotting.");
         ImGui::End();
@@ -470,7 +503,7 @@ void PlayerNode::DrawHistoryWindow() {
     }
 
     ImGui::Text("Plotting %d points (downsampled from %zu)", sample_count,
-                playback_history_.size());
+                capture_buffer_.size());
 
     if (ImPlot::BeginPlot("Captured Buffers", ImVec2(-1, -1))) {
         ImPlot::SetupAxes("Sample", "Amplitude",
@@ -490,34 +523,65 @@ void PlayerNode::DrawHistoryWindow() {
     ImGui::End();
 }
 
-const float* PlayerNode::PreparePlotData(int* sample_count) {
+const float* PlayerNode::PreparePlotData(const std::vector<float>& samples, int* sample_count) {
     if (sample_count == nullptr) {
         return nullptr;
     }
 
-    if (playback_history_.empty()) {
+    if (samples.empty()) {
         *sample_count = 0;
         return nullptr;
     }
 
-    if (playback_history_.size() <= max_plot_samples_) {
-        *sample_count = static_cast<int>(playback_history_.size());
-        return playback_history_.data();
+    if (samples.size() <= max_plot_samples_) {
+        *sample_count = static_cast<int>(samples.size());
+        return samples.data();
     }
 
     const size_t stride =
-        (playback_history_.size() + max_plot_samples_ - 1) / max_plot_samples_;
+        (samples.size() + max_plot_samples_ - 1) / max_plot_samples_;
     const size_t downsampled_count =
-        (playback_history_.size() + stride - 1) / stride;
+        (samples.size() + stride - 1) / stride;
     plot_scratch_buffer_.resize(downsampled_count);
 
     size_t idx = 0;
-    for (size_t i = 0; i < playback_history_.size(); i += stride) {
-        plot_scratch_buffer_[idx++] = playback_history_[i];
+    for (size_t i = 0; i < samples.size(); i += stride) {
+        plot_scratch_buffer_[idx++] = samples[i];
     }
 
     *sample_count = static_cast<int>(idx);
     return plot_scratch_buffer_.data();
+}
+
+void PlayerNode::StartCapture() {
+    capture_target_samples_ = static_cast<size_t>(std::max(1, capture_target_input_));
+    capture_buffer_.clear();
+    capture_buffer_.reserve(capture_target_samples_);
+    capture_samples_collected_ = 0;
+    capture_active_ = true;
+    capture_ready_ = false;
+}
+
+void PlayerNode::AppendCaptureSamples(const std::vector<float>& samples) {
+    if (!capture_active_ || samples.empty()) {
+        return;
+    }
+
+    size_t remaining = capture_target_samples_ - capture_samples_collected_;
+    if (remaining == 0) {
+        capture_active_ = false;
+        capture_ready_ = true;
+        return;
+    }
+
+    size_t to_copy = std::min(remaining, samples.size());
+    capture_buffer_.insert(capture_buffer_.end(), samples.begin(), samples.begin() + to_copy);
+    capture_samples_collected_ += to_copy;
+
+    if (capture_samples_collected_ >= capture_target_samples_) {
+        capture_active_ = false;
+        capture_ready_ = true;
+    }
 }
 
 // ============================================================================
