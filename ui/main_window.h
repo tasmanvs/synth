@@ -3,7 +3,6 @@
 #include "imgui.h"
 #include "implot.h"
 #include "imgui_node_editor.h"
-#include "audio/audio_synth.h"
 #include "audio/audio_interface.h"
 #include "audio/audio_node_graph.h"
 #include <vector>
@@ -24,8 +23,6 @@ private:
     bool show_node_editor_window_;
     bool show_audio_nodes_window_;
     ImVec4 clear_color_;
-    float slider_value_;
-    int counter_;
     
     // Audio parameters
     float frequency_;
@@ -34,7 +31,6 @@ private:
     int sample_rate_;
     
     // Audio components
-    AudioSynth audio_synth_;          // Generates waveforms
     AudioInterface audio_interface_;   // Handles playback
     
     // Audio node graph

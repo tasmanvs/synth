@@ -15,8 +15,6 @@ MainWindow::MainWindow()
     , show_node_editor_window_(false)
     , show_audio_nodes_window_(true)
     , clear_color_(0.45f, 0.55f, 0.60f, 1.00f)
-    , slider_value_(0.0f)
-    , counter_(0)
     , frequency_(440.0f)
     , volume_(0.3f)
     , playing_(false)
@@ -57,11 +55,8 @@ void MainWindow::Update()
         {
             LOG(INFO) << "Starting audio tone at " << frequency_ << " Hz, volume " << volume_;
             
-            // Generate waveform using synth
-            auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
+            // Note: Waveform generation removed - use audio node graph instead
             
-            // Play using audio interface
-            audio_interface_.PlaySamples(samples, sample_rate_, true);
             audio_interface_.Play();
         }
         else
@@ -77,15 +72,7 @@ void MainWindow::Update()
     {
         LOG(INFO) << "Updating tone: frequency=" << frequency_ << " Hz, volume=" << volume_;
         
-        // Stop current playback
-    audio_interface_.Stop();
-        
-        // Generate new waveform
-        auto samples = audio_synth_.generateSineWaveCycle(frequency_, sample_rate_, volume_);
-        
-        // Play new waveform
-    audio_interface_.PlaySamples(samples, sample_rate_, true);
-    audio_interface_.Play();
+        // Note: Waveform generation removed - use audio node graph instead
         
         last_frequency = frequency_;
         last_volume = volume_;
@@ -120,41 +107,8 @@ void MainWindow::Draw()
         ImGui::Checkbox("Another Window", &show_another_window_);
 
         ImGui::Separator();
-        ImGui::Text("Audio Synthesizer");
-        
-        if (ImGui::Button(playing_ ? "Stop" : "Play"))
-            playing_ = !playing_;
-        
-        ImGui::SliderFloat("Frequency (Hz)", &frequency_, 20.0f, 2000.0f, "%.1f Hz");
-        ImGui::SliderFloat("Volume", &volume_, 0.0f, 1.0f);
-        
-        // Show waveform from audio interface
-        if (playing_)
-        {
-            const auto& samples = audio_interface_.GetCurrentSamples();
-            if (!samples.empty())
-            {
-                // Convert short samples to float for visualization
-                std::vector<float> float_samples(samples.size());
-                for (size_t i = 0; i < samples.size(); ++i)
-                {
-                    float_samples[i] = samples[i] / 32767.0f;
-                }
-                
-                ImGui::PlotLines("Waveform", float_samples.data(), 
-                                static_cast<int>(float_samples.size()), 0, nullptr, -1.0f, 1.0f, 
-                                ImVec2(0, 80));
-            }
-        }
-
-        ImGui::Separator();
-        ImGui::SliderFloat("float", &slider_value_, 0.0f, 1.0f);
         ImGui::ColorEdit3("clear color", (float*)&clear_color_);
 
-        if (ImGui::Button("Button"))
-            counter_++;
-        ImGui::SameLine();
-        ImGui::Text("counter = %d", counter_);
 
         ImGuiIO& io = ImGui::GetIO();
         ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",

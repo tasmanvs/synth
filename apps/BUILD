@@ -78,7 +78,6 @@ cc_binary(
         "@imgui//:imgui",
         "//:imgui_glfw_opengl3_emscripten",
         "//ui:main_window",
-        "//audio:audio_synth",
     ],
     linkopts = [
         "-sUSE_GLFW=3",

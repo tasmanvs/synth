@@ -41,15 +41,6 @@ Tests the FLAC audio codec library integration.
 
 ---
 
-### Libraries
-
-#### Audio Synthesis Library
-```powershell
-bazelisk build //audio:audio_synth
-```
-Pure waveform generator library (no platform dependencies).
-
----
 
 ## Running WebGL Applications
 
