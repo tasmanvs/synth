@@ -388,8 +388,8 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , plot_scratch_buffer_()
     , max_plot_samples_(16000)
     , pcm_convert_buffer_()
-    , streaming_buffer_size_(2048)
-    , max_queue_buffers_(6)
+    , streaming_buffer_size_(512)
+    , max_queue_buffers_(12)
     , needs_stream_prime_(true)
     , capture_buffer_()
     , capture_target_samples_(48000)
@@ -401,7 +401,8 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , spectrogram_time_slices_(100)
     , fft_size_(512)
     , fft_input_buffer_(fft_size_, 0.0f)
-    , sample_rate_(48000) {
+    , sample_rate_(48000)
+    , spectrogram_sample_counter_(0) {
     // Initialize Hann window for FFT
     fft_window_.resize(fft_size_);
     for (int i = 0; i < fft_size_; ++i) {
@@ -774,6 +775,17 @@ void PlayerNode::UpdateSpectrogram(const std::vector<float>& samples) {
         fft_input_buffer_.push_back(sample);
     }
     
+    spectrogram_sample_counter_ += static_cast<int>(samples.size());
+    
+    // Only compute FFT when we've accumulated enough samples (hop size = FFT size / 4)
+    // This prevents excessive FFT computation with small buffer sizes
+    int hop_size = fft_size_ / 4;
+    if (spectrogram_sample_counter_ < hop_size) {
+        return;
+    }
+    
+    spectrogram_sample_counter_ = 0;
+    
     // Apply window and compute FFT
     std::vector<float> windowed(fft_size_);
     for (int i = 0; i < fft_size_; ++i) {
@@ -812,6 +824,7 @@ void PlayerNode::DrawSpectrogramView() {
             fft_window_[i] = 0.5f * (1.0f - std::cos(2.0f * 3.14159265359f * i / (fft_size_ - 1)));
         }
         spectrogram_data_.clear();
+        spectrogram_sample_counter_ = 0;
     }
     
     int time_slices_int = static_cast<int>(spectrogram_time_slices_);

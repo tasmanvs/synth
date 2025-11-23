@@ -179,6 +179,7 @@ private:
     std::vector<float> fft_window_;
     std::vector<float> fft_input_buffer_;
     int sample_rate_;
+    int spectrogram_sample_counter_;
 
     void AppendToHistory(const std::vector<float>& samples);
     void DrawHistoryWindow();
