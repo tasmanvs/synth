@@ -1,0 +1,27 @@
+diff --git a/BUILD.bazel b/BUILD.bazel
+new file mode 100644
+index 0000000..9e6f7fd
+--- /dev/null
++++ b/BUILD.bazel
+@@ -0,0 +1,21 @@
++cc_library(
++    name = "imgui",
++    srcs = [
++        "imgui.cpp",
++        "imgui_demo.cpp",
++        "imgui_draw.cpp",
++        "imgui_tables.cpp",
++        "imgui_widgets.cpp",
++    ],
++    hdrs = [
++        "imconfig.h",
++        "imgui.h",
++        "imgui_internal.h",
++        "imstb_rectpack.h",
++        "imstb_textedit.h",
++        "imstb_truetype.h",
++    ],
++    includes = ["."],
++    strip_include_prefix = "",
++    visibility = ["//visibility:public"],
++)

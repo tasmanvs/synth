@@ -1,0 +1,4 @@
+module(
+    name = "imgui",
+    version = "1.91.7-docking",
+)
