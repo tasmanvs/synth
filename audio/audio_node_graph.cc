@@ -804,7 +804,15 @@ void PlayerNode::DrawSpectrogramView() {
     }
     
     ImGui::Text("Live Spectrogram View");
-    ImGui::SliderInt("FFT Size", &fft_size_, 128, 2048);
+    if (ImGui::SliderInt("FFT Size", &fft_size_, 128, 2048)) {
+        // Automatically reset buffers when FFT size changes
+        fft_input_buffer_.resize(fft_size_, 0.0f);
+        fft_window_.resize(fft_size_);
+        for (int i = 0; i < fft_size_; ++i) {
+            fft_window_[i] = 0.5f * (1.0f - std::cos(2.0f * 3.14159265359f * i / (fft_size_ - 1)));
+        }
+        spectrogram_data_.clear();
+    }
     
     int time_slices_int = static_cast<int>(spectrogram_time_slices_);
     if (ImGui::SliderInt("Time Slices", &time_slices_int, 10, 500)) {
