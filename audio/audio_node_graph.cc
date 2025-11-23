@@ -790,6 +790,11 @@ void PlayerNode::DrawSpectrogramView() {
     ImGui::Text("Live Spectrogram View");
     ImGui::SliderInt("FFT Size", &fft_size_, 128, 2048);
     
+    int time_slices_int = static_cast<int>(spectrogram_time_slices_);
+    if (ImGui::SliderInt("Time Slices", &time_slices_int, 10, 500)) {
+        spectrogram_time_slices_ = static_cast<size_t>(time_slices_int);
+    }
+    
     if (ImGui::Button("Reset FFT Size")) {
         fft_input_buffer_.resize(fft_size_, 0.0f);
         fft_window_.resize(fft_size_);
