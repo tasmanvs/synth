@@ -1087,9 +1087,10 @@ void AudioNodeGraph::Update(int sample_rate) {
         return;
     }
 
-    if (player_node_->IsPlaying() && HasGraphChanged()) {
-        player_node_->OnGraphChanged();
-    }
+    // Don't call OnGraphChanged() for parameter changes - the phase-continuous
+    // generators handle smooth transitions without needing to clear buffers
+    // HasGraphChanged() is still checked to reset the change flags
+    HasGraphChanged();
 
     player_node_->UpdateAudio(sample_rate);
 }
