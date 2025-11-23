@@ -96,19 +96,33 @@ HarmonicNode::HarmonicNode(int node_id)
 }
 
 void HarmonicNode::UpdateHarmonics() {
-    harmonic_configs_.clear();
-    harmonic_generators_.clear();
+    // Preserve existing generators to maintain phase continuity
+    int current_count = static_cast<int>(harmonic_generators_.size());
     
-    // Create a generator for each harmonic
+    if (num_harmonics_ > current_count) {
+        // Add new generators
+        for (int i = current_count; i < num_harmonics_; ++i) {
+            audio_loop::BufferConfig config;
+            config.frequency_hz = base_frequency_ * (i + 1);
+            config.amplitude = volume_ / static_cast<float>(num_harmonics_);
+            config.sample_rate = 48000;
+            config.frame_count = 512;
+            
+            harmonic_configs_.push_back(config);
+            harmonic_generators_.emplace_back(0.0f);
+        }
+    } else if (num_harmonics_ < current_count) {
+        // Remove excess generators
+        harmonic_configs_.resize(num_harmonics_);
+        harmonic_generators_.resize(num_harmonics_);
+    }
+    
+    // Update existing configs (generators maintain their phase)
     for (int i = 0; i < num_harmonics_; ++i) {
-        audio_loop::BufferConfig config;
-        config.frequency_hz = base_frequency_ * (i + 1);  // 1x, 2x, 3x, etc.
-        config.amplitude = volume_ / static_cast<float>(num_harmonics_);  // Divide volume among harmonics
-        config.sample_rate = 48000;
-        config.frame_count = 512;
-        
-        harmonic_configs_.push_back(config);
-        harmonic_generators_.emplace_back(0.0f);
+        if (i < static_cast<int>(harmonic_configs_.size())) {
+            harmonic_configs_[i].frequency_hz = base_frequency_ * (i + 1);
+            harmonic_configs_[i].amplitude = volume_ / static_cast<float>(num_harmonics_);
+        }
     }
 }
 
@@ -380,7 +394,16 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , capture_samples_collected_(0)
     , capture_active_(false)
     , capture_ready_(false)
-    , capture_target_input_(48000) {
+    , capture_target_input_(48000)
+    , show_spectrogram_(false)
+    , spectrogram_time_slices_(100)
+    , fft_size_(512)
+    , fft_input_buffer_(fft_size_, 0.0f) {
+    // Initialize Hann window for FFT
+    fft_window_.resize(fft_size_);
+    for (int i = 0; i < fft_size_; ++i) {
+        fft_window_[i] = 0.5f * (1.0f - std::cos(2.0f * 3.14159265359f * i / (fft_size_ - 1)));
+    }
 }
 
 std::vector<float> PlayerNode::GenerateAudio(int num_samples, int sample_rate) {
@@ -425,12 +448,23 @@ void PlayerNode::Draw() {
         show_debug_window_ = true;
     }
     
+    ImGui::SameLine();
+    if (ImGui::Button("Spectrogram")) {
+        show_spectrogram_ = true;
+    }
+    
     ed::EndNode();
     ImGui::PopID();
 
     if (show_debug_window_) {
         ed::Suspend();
         DrawHistoryWindow();
+        ed::Resume();
+    }
+    
+    if (show_spectrogram_) {
+        ed::Suspend();
+        DrawSpectrogramView();
         ed::Resume();
     }
 }
@@ -548,6 +582,10 @@ void PlayerNode::AppendToHistory(const std::vector<float>& samples) {
     }
 
     AppendCaptureSamples(samples);
+    
+    if (show_spectrogram_) {
+        UpdateSpectrogram(samples);
+    }
 }
 
 void PlayerNode::DrawHistoryWindow() {
@@ -685,6 +723,134 @@ void PlayerNode::AppendCaptureSamples(const std::vector<float>& samples) {
         capture_active_ = false;
         capture_ready_ = true;
     }
+}
+
+void PlayerNode::ComputeFFT(const float* input, int size, std::vector<float>& magnitudes) {
+    // Simple DFT implementation for visualization (not optimized)
+    // Only compute first half of spectrum (positive frequencies)
+    int half_size = size / 2;
+    magnitudes.resize(half_size);
+    
+    for (int k = 0; k < half_size; ++k) {
+        float real_sum = 0.0f;
+        float imag_sum = 0.0f;
+        
+        for (int n = 0; n < size; ++n) {
+            float angle = -2.0f * 3.14159265359f * k * n / size;
+            real_sum += input[n] * std::cos(angle);
+            imag_sum += input[n] * std::sin(angle);
+        }
+        
+        // Compute magnitude and convert to dB scale
+        float magnitude = std::sqrt(real_sum * real_sum + imag_sum * imag_sum);
+        magnitude = magnitude / size; // Normalize
+        
+        // Convert to dB (with floor to avoid log(0))
+        float db = 20.0f * std::log10(std::max(magnitude, 1e-6f));
+        magnitudes[k] = db;
+    }
+}
+
+void PlayerNode::UpdateSpectrogram(const std::vector<float>& samples) {
+    // Accumulate samples into FFT input buffer
+    for (float sample : samples) {
+        fft_input_buffer_.erase(fft_input_buffer_.begin());
+        fft_input_buffer_.push_back(sample);
+    }
+    
+    // Apply window and compute FFT
+    std::vector<float> windowed(fft_size_);
+    for (int i = 0; i < fft_size_; ++i) {
+        windowed[i] = fft_input_buffer_[i] * fft_window_[i];
+    }
+    
+    std::vector<float> magnitudes;
+    ComputeFFT(windowed.data(), fft_size_, magnitudes);
+    
+    // Add to spectrogram data (shift old data)
+    spectrogram_data_.push_back(magnitudes);
+    
+    // Keep only recent time slices
+    if (spectrogram_data_.size() > spectrogram_time_slices_) {
+        spectrogram_data_.erase(spectrogram_data_.begin());
+    }
+}
+
+void PlayerNode::DrawSpectrogramView() {
+    if (!show_spectrogram_) {
+        return;
+    }
+    
+    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Spectrogram", &show_spectrogram_)) {
+        ImGui::End();
+        return;
+    }
+    
+    ImGui::Text("Live Spectrogram View");
+    ImGui::SliderInt("FFT Size", &fft_size_, 128, 2048);
+    
+    if (ImGui::Button("Reset FFT Size")) {
+        fft_input_buffer_.resize(fft_size_, 0.0f);
+        fft_window_.resize(fft_size_);
+        for (int i = 0; i < fft_size_; ++i) {
+            fft_window_[i] = 0.5f * (1.0f - std::cos(2.0f * 3.14159265359f * i / (fft_size_ - 1)));
+        }
+        spectrogram_data_.clear();
+    }
+    
+    ImGui::SameLine();
+    if (ImGui::Button("Clear")) {
+        spectrogram_data_.clear();
+    }
+    
+    if (spectrogram_data_.empty()) {
+        ImGui::Text("No spectrogram data yet. Start playing audio.");
+        ImGui::End();
+        return;
+    }
+    
+    // Draw spectrogram as a heatmap
+    if (ImPlot::BeginPlot("Spectrogram", ImVec2(-1, -1))) {
+        ImPlot::SetupAxes("Time Slice", "Frequency Bin");
+        ImPlot::SetupAxesLimits(0, static_cast<double>(spectrogram_data_.size()),
+                               0, static_cast<double>(fft_size_ / 2),
+                               ImPlotCond_Always);
+        
+        // Draw as a heatmap using lines
+        for (size_t time_idx = 0; time_idx < spectrogram_data_.size(); ++time_idx) {
+            const auto& slice = spectrogram_data_[time_idx];
+            
+            // Normalize and colorize based on magnitude
+            for (size_t freq_idx = 0; freq_idx < slice.size(); ++freq_idx) {
+                float db = slice[freq_idx];
+                
+                // Map dB to color intensity (-80 dB to 0 dB range)
+                float normalized = (db + 80.0f) / 80.0f;
+                normalized = std::max(0.0f, std::min(1.0f, normalized));
+                
+                if (normalized > 0.1f) { // Only draw if above threshold
+                    // Color from blue (low) to red (high)
+                    ImVec4 color;
+                    if (normalized < 0.5f) {
+                        color = ImVec4(0.0f, normalized * 2.0f, 1.0f - normalized * 2.0f, normalized);
+                    } else {
+                        color = ImVec4((normalized - 0.5f) * 2.0f, 1.0f - (normalized - 0.5f) * 2.0f, 0.0f, normalized);
+                    }
+                    
+                    ImPlot::SetNextLineStyle(color, 2.0f);
+                    
+                    double x[2] = {static_cast<double>(time_idx), static_cast<double>(time_idx)};
+                    double y[2] = {static_cast<double>(freq_idx), static_cast<double>(freq_idx + 1)};
+                    ImPlot::PlotLine("##spec", x, y, 2);
+                }
+            }
+        }
+        
+        ImPlot::EndPlot();
+    }
+    
+    ImGui::End();
 }
 
 // ============================================================================

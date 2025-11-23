@@ -172,14 +172,23 @@ private:
     bool capture_active_;
     bool capture_ready_;
     int capture_target_input_;
+    bool show_spectrogram_;
+    std::vector<std::vector<float>> spectrogram_data_;
+    size_t spectrogram_time_slices_;
+    int fft_size_;
+    std::vector<float> fft_window_;
+    std::vector<float> fft_input_buffer_;
 
     void AppendToHistory(const std::vector<float>& samples);
     void DrawHistoryWindow();
+    void DrawSpectrogramView();
     const float* PreparePlotData(const std::vector<float>& samples, int* sample_count);
     void UpdateStreaming(int sample_rate);
     bool QueueGeneratedAudio(int sample_rate);
     void StartCapture();
     void AppendCaptureSamples(const std::vector<float>& samples);
+    void ComputeFFT(const float* input, int size, std::vector<float>& magnitudes);
+    void UpdateSpectrogram(const std::vector<float>& samples);
 };
 
 // Audio node graph manager
