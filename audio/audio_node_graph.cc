@@ -1,6 +1,8 @@
 #include "audio/audio_node_graph.h"
 #include "absl/log/log.h"
+#include "pocketfft_hdronly.h"
 #include <algorithm>
+#include <complex>
 
 namespace audio_nodes {
 
@@ -398,7 +400,8 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , show_spectrogram_(false)
     , spectrogram_time_slices_(100)
     , fft_size_(512)
-    , fft_input_buffer_(fft_size_, 0.0f) {
+    , fft_input_buffer_(fft_size_, 0.0f)
+    , sample_rate_(48000) {
     // Initialize Hann window for FFT
     fft_window_.resize(fft_size_);
     for (int i = 0; i < fft_size_; ++i) {
@@ -532,6 +535,8 @@ void PlayerNode::UpdateStreaming(int sample_rate) {
     if (!audio_interface_) {
         return;
     }
+
+    sample_rate_ = sample_rate;
 
     if (needs_stream_prime_) {
         audio_interface_->ClearStreamingQueue();
@@ -726,23 +731,34 @@ void PlayerNode::AppendCaptureSamples(const std::vector<float>& samples) {
 }
 
 void PlayerNode::ComputeFFT(const float* input, int size, std::vector<float>& magnitudes) {
-    // Simple DFT implementation for visualization (not optimized)
+    // Use PocketFFT for efficient FFT computation
     // Only compute first half of spectrum (positive frequencies)
     int half_size = size / 2;
     magnitudes.resize(half_size);
     
+    // Prepare input for PocketFFT (copy to complex vector)
+    std::vector<std::complex<float>> fft_data(size);
+    for (int i = 0; i < size; ++i) {
+        fft_data[i] = std::complex<float>(input[i], 0.0f);
+    }
+    
+    // Perform FFT using PocketFFT
+    pocketfft::shape_t shape{static_cast<size_t>(size)};
+    pocketfft::stride_t stride_in{sizeof(std::complex<float>)};
+    pocketfft::stride_t stride_out{sizeof(std::complex<float>)};
+    pocketfft::shape_t axes{0};
+    
+    pocketfft::c2c(shape, stride_in, stride_out, axes, 
+                   pocketfft::FORWARD,
+                   fft_data.data(), fft_data.data(), 1.0f);
+    
+    // Compute magnitudes and convert to dB scale
     for (int k = 0; k < half_size; ++k) {
-        float real_sum = 0.0f;
-        float imag_sum = 0.0f;
+        float real_part = fft_data[k].real();
+        float imag_part = fft_data[k].imag();
         
-        for (int n = 0; n < size; ++n) {
-            float angle = -2.0f * 3.14159265359f * k * n / size;
-            real_sum += input[n] * std::cos(angle);
-            imag_sum += input[n] * std::sin(angle);
-        }
-        
-        // Compute magnitude and convert to dB scale
-        float magnitude = std::sqrt(real_sum * real_sum + imag_sum * imag_sum);
+        // Compute magnitude
+        float magnitude = std::sqrt(real_part * real_part + imag_part * imag_part);
         magnitude = magnitude / size; // Normalize
         
         // Convert to dB (with floor to avoid log(0))
@@ -817,16 +833,19 @@ void PlayerNode::DrawSpectrogramView() {
     
     // Draw spectrogram as a heatmap
     if (ImPlot::BeginPlot("Spectrogram", ImVec2(-1, -1))) {
-        ImPlot::SetupAxes("Time Slice", "Frequency Bin");
+        ImPlot::SetupAxes("Time Slice", "Frequency (Hz)");
+        float max_frequency = static_cast<float>(sample_rate_) / 2.0f;
         ImPlot::SetupAxesLimits(0, static_cast<double>(spectrogram_data_.size()),
-                               0, static_cast<double>(fft_size_ / 2),
-                               ImPlotCond_Always);
+                               0, static_cast<double>(max_frequency),
+                               ImPlotCond_Once);
         
         // Draw as a heatmap using lines
         for (size_t time_idx = 0; time_idx < spectrogram_data_.size(); ++time_idx) {
             const auto& slice = spectrogram_data_[time_idx];
             
             // Normalize and colorize based on magnitude
+            float freq_bin_to_hz = static_cast<float>(sample_rate_) / static_cast<float>(fft_size_);
+            
             for (size_t freq_idx = 0; freq_idx < slice.size(); ++freq_idx) {
                 float db = slice[freq_idx];
                 
@@ -845,8 +864,9 @@ void PlayerNode::DrawSpectrogramView() {
                     
                     ImPlot::SetNextLineStyle(color, 2.0f);
                     
+                    // Convert bin indices to frequency in Hz
                     double x[2] = {static_cast<double>(time_idx), static_cast<double>(time_idx)};
-                    double y[2] = {static_cast<double>(freq_idx), static_cast<double>(freq_idx + 1)};
+                    double y[2] = {freq_idx * freq_bin_to_hz, (freq_idx + 1) * freq_bin_to_hz};
                     ImPlot::PlotLine("##spec", x, y, 2);
                 }
             }

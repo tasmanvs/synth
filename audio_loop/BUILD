@@ -34,6 +34,7 @@ cc_binary(
         "dxgi.lib",
         "d3dcompiler.lib",
     ],
+    target_compatible_with = ["@platforms//os:windows"],
 )
 
 cc_test(

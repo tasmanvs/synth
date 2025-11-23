@@ -25,6 +25,7 @@ cc_binary(
         "d3dcompiler.lib",
     ],
     visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//os:windows"],
 )
 
 cc_binary(

@@ -20,7 +20,9 @@ cc_library(
         "@imgui//:imgui",
         "@implot//:implot",
         "@abseil-cpp//absl/log",
+        "@pocketfft//:pocketfft",
     ],
+    copts = ["-fexceptions"],
     visibility = ["//visibility:public"],
     target_compatible_with = ["@platforms//cpu:wasm32"],
 )

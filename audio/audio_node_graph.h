@@ -178,6 +178,7 @@ private:
     int fft_size_;
     std::vector<float> fft_window_;
     std::vector<float> fft_input_buffer_;
+    int sample_rate_;
 
     void AppendToHistory(const std::vector<float>& samples);
     void DrawHistoryWindow();

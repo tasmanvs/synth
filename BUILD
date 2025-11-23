@@ -26,5 +26,20 @@ exports_files([
     "shell.html",
 ])
 
+# Custom compile commands target for clangd
+# This only includes WebAssembly-compatible targets
+load("@hedron_compile_commands//:refresh_compile_commands.bzl", "refresh_compile_commands")
+
+refresh_compile_commands(
+    name = "refresh_compile_commands",
+    targets = {
+        "//apps:imgui_webgl_bin": "--platforms=@emsdk//:platform_wasm",
+        "//ui:main_window": "--platforms=@emsdk//:platform_wasm",
+        "//audio:audio_interface": "--platforms=@emsdk//:platform_wasm",
+        "//audio:audio_node_graph": "--platforms=@emsdk//:platform_wasm",
+        "//audio_loop:audio_loop_lib": "",
+        "//node_editor:imgui_node_editor": "--platforms=@emsdk//:platform_wasm",
+    },
+)
 
 
