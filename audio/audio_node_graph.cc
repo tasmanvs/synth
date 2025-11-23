@@ -388,8 +388,8 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , plot_scratch_buffer_()
     , max_plot_samples_(16000)
     , pcm_convert_buffer_()
-    , streaming_buffer_size_(512)
-    , max_queue_buffers_(12)
+    , streaming_buffer_size_(64)
+    , max_queue_buffers_(64)
     , needs_stream_prime_(true)
     , capture_buffer_()
     , capture_target_samples_(48000)
@@ -800,7 +800,7 @@ void PlayerNode::UpdateSpectrogram(const std::vector<float>& samples) {
     
     // Keep only recent time slices
     if (spectrogram_data_.size() > spectrogram_time_slices_) {
-        spectrogram_data_.erase(spectrogram_data_.begin());
+        spectrogram_data_.pop_front();
     }
 }
 
@@ -816,7 +816,7 @@ void PlayerNode::DrawSpectrogramView() {
     }
     
     ImGui::Text("Live Spectrogram View");
-    if (ImGui::SliderInt("FFT Size", &fft_size_, 128, 2048)) {
+    if (ImGui::SliderInt("FFT Size", &fft_size_, 128, 16384)) {
         // Automatically reset buffers when FFT size changes
         fft_input_buffer_.resize(fft_size_, 0.0f);
         fft_window_.resize(fft_size_);

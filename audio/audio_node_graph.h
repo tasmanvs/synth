@@ -8,6 +8,7 @@
 #include <vector>
 #include <memory>
 #include <map>
+#include <deque>
 
 namespace audio_nodes {
 
@@ -173,7 +174,7 @@ private:
     bool capture_ready_;
     int capture_target_input_;
     bool show_spectrogram_;
-    std::vector<std::vector<float>> spectrogram_data_;
+    std::deque<std::vector<float>> spectrogram_data_;
     size_t spectrogram_time_slices_;
     int fft_size_;
     std::vector<float> fft_window_;
