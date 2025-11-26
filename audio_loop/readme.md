@@ -3,7 +3,7 @@
 This directory contains:
 
 - `audio_loop_lib`: a phase-tracking oscillator (`PhaseContinuousSine`) that generates buffers of arbitrary length without introducing clicks between consecutive calls. Helper utilities expose continuity checks and buffer concatenation.
-- `buffer_visualizer`: a DirectX11 + ImGui/ImPlot desktop viewer (derived from `//examples:imgui_dx11`) that plots multiple buffers side-by-side while you tune frequency, amplitude, sample rate, buffer length, starting phase, and buffer count. Continuity metrics are listed per buffer junction.
+- `buffer_visualizer`: a DirectX11 + ImGui/ImPlot desktop viewer (currently disabled - requires backends not available in imgui module version) that plots multiple buffers side-by-side while you tune frequency, amplitude, sample rate, buffer length, starting phase, and buffer count. Continuity metrics are listed per buffer junction.
 - `audio_buffer_test`: a gtest suite that validates smooth transitions across buffers, different buffer sizes, on-the-fly frequency changes, and detects intentional phase resets.
 
 ## Running the tests

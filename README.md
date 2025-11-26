@@ -25,12 +25,11 @@ bazelisk run //examples:hello_world
 ```
 Simple demonstration of Abseil string utilities and logging.
 
-#### 2. ImGui DirectX 11 (Windows)
+#### 2. ~~ImGui DirectX 11 (Windows)~~ (Removed)
 ```powershell
-bazelisk build //examples:imgui_dx11
-bazelisk run //examples:imgui_dx11
+# Removed - requires backends not available in imgui module version
 ```
-Native Windows ImGui application using DirectX 11 renderer.
+~~Native Windows ImGui application using DirectX 11 renderer.~~
 
 #### 3. FLAC Library Test
 ```powershell
@@ -89,9 +88,8 @@ This separation keeps the UI code modular and testable.
 | Target | Description | Platform | Command |
 |--------|-------------|----------|---------|
 | `//examples:hello_world` | Abseil demo | Windows | `bazelisk build //examples:hello_world` |
-| `//examples:imgui_dx11` | ImGui DirectX 11 | Windows | `bazelisk build //examples:imgui_dx11` |
+| ~~`//examples:imgui_dx11`~~ | ~~ImGui DirectX 11~~ | ~~Windows~~ | Removed (backends unavailable) |
 | `//examples:flac_test` | FLAC library test | Windows | `bazelisk build //examples:flac_test` |
-| `//audio:audio_synth` | Audio synthesis lib | All | `bazelisk build //audio:audio_synth` |
 | `//apps:imgui_webgl` | ImGui + ImPlot WebGL | Browser (WASM) | `bazelisk build //apps:imgui_webgl --platforms=@emsdk//:platform_wasm` |
 | `//apps:audio_webgl` | ImGui + OpenAL WebGL | Browser (WASM) | `bazelisk build //apps:audio_webgl --platforms=@emsdk//:platform_wasm` |
 | `//examples:imgui_hello` | ImGui OpenGL demo | Browser (WASM) | `bazelisk build //examples:imgui_hello --platforms=@emsdk//:platform_wasm` |

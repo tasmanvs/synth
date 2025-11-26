@@ -1,7 +1,6 @@
 #pragma once
 
-#include "imgui.h"
-#include "implot.h"
+
 #include "imgui_node_editor.h"
 #include "audio/audio_interface.h"
 #include "audio_loop/sine_buffer_generator.h"

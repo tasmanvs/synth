@@ -12,23 +12,6 @@ cc_binary(
 )
 
 cc_binary(
-    name = "imgui_dx11",
-    srcs = ["imgui_dx11.cc"],
-    deps = [
-        "@imgui//:imgui",
-        "@imgui//backends:platform-win32",
-        "@imgui//backends:renderer-dx11",
-    ],
-    linkopts = [
-        "d3d11.lib",
-        "dxgi.lib",
-        "d3dcompiler.lib",
-    ],
-    visibility = ["//visibility:public"],
-    target_compatible_with = ["@platforms//os:windows"],
-)
-
-cc_binary(
     name = "flac_test",
     srcs = ["flac_test.cc"],
     deps = [

@@ -3,6 +3,8 @@
 #include "pocketfft_hdronly.h"
 #include <algorithm>
 #include <complex>
+#include "imgui.h"
+#include "implot.h"
 
 namespace audio_nodes {
 

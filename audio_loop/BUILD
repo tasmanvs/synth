@@ -18,24 +18,24 @@ cc_library(
     ],
 )
 
-cc_binary(
-    name = "buffer_visualizer",
-    srcs = ["buffer_visualizer.cc"],
-    deps = [
-        ":audio_loop_lib",
-        ":audio_output",
-        "@imgui//:imgui",
-        "@imgui//backends:platform-win32",
-        "@imgui//backends:renderer-dx11",
-        "@implot//:implot",
-    ],
-    linkopts = [
-        "d3d11.lib",
-        "dxgi.lib",
-        "d3dcompiler.lib",
-    ],
-    target_compatible_with = ["@platforms//os:windows"],
-)
+# cc_binary(
+#     name = "buffer_visualizer",
+#     srcs = ["buffer_visualizer.cc"],
+#     deps = [
+#         ":audio_loop_lib",
+#         ":audio_output",
+#         "@imgui//:imgui",
+#         "@imgui//backends:platform-win32",
+#         "@imgui//backends:renderer-dx11",
+#         "@implot//:implot",
+#     ],
+#     linkopts = [
+#         "d3d11.lib",
+#         "dxgi.lib",
+#         "d3dcompiler.lib",
+#     ],
+#     target_compatible_with = ["@platforms//os:windows"],
+# )
 
 cc_test(
     name = "audio_buffer_test",
