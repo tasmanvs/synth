@@ -2,10 +2,8 @@
 
 #include "imgui.h"
 #include "implot.h"
-#include "imgui_node_editor.h"
 #include "audio/audio_interface.h"
 #include "audio/audio_node_graph.h"
-#include <vector>
 #include <memory>
 
 class MainWindow {
@@ -19,8 +17,6 @@ public:
 private:
     bool show_demo_window_;
     bool show_implot_demo_window_;
-    bool show_another_window_;
-    bool show_node_editor_window_;
     bool show_audio_nodes_window_;
     ImVec4 clear_color_;
     
@@ -36,13 +32,9 @@ private:
     // Audio node graph
     std::unique_ptr<audio_nodes::AudioNodeGraph> audio_node_graph_;
     
-    // Node editor (for demo)
-    ax::NodeEditor::EditorContext* node_editor_context_;
-    bool node_editor_initialized_;
     bool dockspace_initialized_;
     bool show_spectrogram_window_;
     
-    void DrawNodeEditorDemo();
     void DrawAudioNodesWindow();
     void DrawSpectrogramWindow();
 };

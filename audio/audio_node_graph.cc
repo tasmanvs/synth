@@ -830,46 +830,42 @@ void PlayerNode::DrawSpectrogramContent() {
         return;
     }
     
+    // Flatten spectrogram data for PlotHeatmap
+    // PlotHeatmap expects data[row][col] in row-major order
+    // Our data: spectrogram_data_[time_slice][freq_bin]
+    // We need to transpose: rows = frequency bins, cols = time slices
+    int rows = static_cast<int>(spectrogram_data_[0].size()); // frequency bins
+    int cols = static_cast<int>(spectrogram_data_.size());     // time slices
+    std::vector<float> heatmap_data(rows * cols);
+    
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < cols; ++col) {
+            heatmap_data[row * cols + col] = spectrogram_data_[col][row];
+        }
+    }
+    
     // Draw spectrogram as a heatmap
     if (ImPlot::BeginPlot("Spectrogram", ImVec2(-1, -1))) {
         ImPlot::SetupAxes("Time Slice", "Frequency (Hz)");
         float max_frequency = static_cast<float>(sample_rate_) / 2.0f;
-        ImPlot::SetupAxesLimits(0, static_cast<double>(spectrogram_data_.size()),
+        
+        // Set up bounds for the heatmap in plot coordinates
+        // Flip Y-axis: row 0 (lowest freq) should be at bottom, so bounds_min.y > bounds_max.y
+        ImPlotPoint bounds_min(0, max_frequency);
+        ImPlotPoint bounds_max(cols, 0);
+        
+        ImPlot::SetupAxesLimits(0, static_cast<double>(cols),
                                0, static_cast<double>(max_frequency),
                                ImPlotCond_Once);
         
-        // Draw as a heatmap using lines
-        for (size_t time_idx = 0; time_idx < spectrogram_data_.size(); ++time_idx) {
-            const auto& slice = spectrogram_data_[time_idx];
-            
-            // Normalize and colorize based on magnitude
-            float freq_bin_to_hz = static_cast<float>(sample_rate_) / static_cast<float>(fft_size_);
-            
-            for (size_t freq_idx = 0; freq_idx < slice.size(); ++freq_idx) {
-                float db = slice[freq_idx];
-                
-                // Map dB to color intensity (-80 dB to 0 dB range)
-                float normalized = (db + 80.0f) / 80.0f;
-                normalized = std::max(0.0f, std::min(1.0f, normalized));
-                
-                if (normalized > 0.1f) { // Only draw if above threshold
-                    // Color from blue (low) to red (high)
-                    ImVec4 color;
-                    if (normalized < 0.5f) {
-                        color = ImVec4(0.0f, normalized * 2.0f, 1.0f - normalized * 2.0f, normalized);
-                    } else {
-                        color = ImVec4((normalized - 0.5f) * 2.0f, 1.0f - (normalized - 0.5f) * 2.0f, 0.0f, normalized);
-                    }
-                    
-                    ImPlot::SetNextLineStyle(color, 2.0f);
-                    
-                    // Convert bin indices to frequency in Hz
-                    double x[2] = {static_cast<double>(time_idx), static_cast<double>(time_idx)};
-                    double y[2] = {freq_idx * freq_bin_to_hz, (freq_idx + 1) * freq_bin_to_hz};
-                    ImPlot::PlotLine("##spec", x, y, 2);
-                }
-            }
-        }
+        // Use a colormap suitable for spectrograms (Viridis, Hot, or Plasma work well)
+        ImPlot::PushColormap(ImPlotColormap_Hot);
+        
+        // Plot heatmap with dB range as scale
+        ImPlot::PlotHeatmap("##heatmap", heatmap_data.data(), rows, cols, 
+                           -80.0, 0.0, nullptr, bounds_min, bounds_max);
+        
+        ImPlot::PopColormap();
         
         ImPlot::EndPlot();
     }
