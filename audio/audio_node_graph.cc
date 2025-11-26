@@ -397,7 +397,6 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , capture_active_(false)
     , capture_ready_(false)
     , capture_target_input_(48000)
-    , show_spectrogram_(false)
     , spectrogram_time_slices_(100)
     , fft_size_(512)
     , fft_input_buffer_(fft_size_, 0.0f)
@@ -452,11 +451,6 @@ void PlayerNode::Draw() {
         show_debug_window_ = true;
     }
     
-    ImGui::SameLine();
-    if (ImGui::Button("Spectrogram")) {
-        show_spectrogram_ = true;
-    }
-    
     ed::EndNode();
     ImGui::PopID();
 
@@ -465,12 +459,7 @@ void PlayerNode::Draw() {
         DrawHistoryWindow();
         ed::Resume();
     }
-    
-    if (show_spectrogram_) {
-        ed::Suspend();
-        DrawSpectrogramView();
-        ed::Resume();
-    }
+
 }
 
 bool PlayerNode::AddInput(AudioNode* input_node, int /*pin_id*/) {
@@ -589,9 +578,7 @@ void PlayerNode::AppendToHistory(const std::vector<float>& samples) {
 
     AppendCaptureSamples(samples);
     
-    if (show_spectrogram_) {
-        UpdateSpectrogram(samples);
-    }
+    UpdateSpectrogram(samples);
 }
 
 void PlayerNode::DrawHistoryWindow() {
@@ -804,17 +791,9 @@ void PlayerNode::UpdateSpectrogram(const std::vector<float>& samples) {
     }
 }
 
-void PlayerNode::DrawSpectrogramView() {
-    if (!show_spectrogram_) {
-        return;
-    }
-    
-    ImGui::SetNextWindowSize(ImVec2(800, 600), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Spectrogram", &show_spectrogram_)) {
-        ImGui::End();
-        return;
-    }
-    
+
+
+void PlayerNode::DrawSpectrogramContent() {
     ImGui::Text("Live Spectrogram View");
     if (ImGui::SliderInt("FFT Size", &fft_size_, 128, 16384)) {
         // Automatically reset buffers when FFT size changes
@@ -848,7 +827,6 @@ void PlayerNode::DrawSpectrogramView() {
     
     if (spectrogram_data_.empty()) {
         ImGui::Text("No spectrogram data yet. Start playing audio.");
-        ImGui::End();
         return;
     }
     
@@ -895,8 +873,6 @@ void PlayerNode::DrawSpectrogramView() {
         
         ImPlot::EndPlot();
     }
-    
-    ImGui::End();
 }
 
 // ============================================================================

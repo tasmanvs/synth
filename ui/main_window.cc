@@ -1,4 +1,5 @@
 #include "ui/main_window.h"
+#include "imgui_internal.h"
 #include <cmath>
 #include <algorithm>
 #include "absl/log/log.h"
@@ -21,6 +22,8 @@ MainWindow::MainWindow()
     , sample_rate_(44100)
     , node_editor_context_(nullptr)
     , node_editor_initialized_(false)
+    , dockspace_initialized_(false)
+    , show_spectrogram_window_(true)
 {
     LOG(INFO) << "MainWindow initialized with sample rate: " << sample_rate_;
     
@@ -109,6 +112,34 @@ void MainWindow::Draw()
     
     ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
     ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None);
+    
+    // Initialize dockspace layout on first frame
+    if (!dockspace_initialized_) {
+        dockspace_initialized_ = true;
+        
+        ImGui::DockBuilderRemoveNode(dockspace_id);
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+        
+        // Split: top 80% and bottom 20%
+        ImGuiID dock_top = 0;
+        ImGuiID dock_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.20f, nullptr, &dock_top);
+        
+        // Dock windows to top (these will be tabbed)
+        ImGui::DockBuilderDockWindow("Audio Nodes", dock_top);
+        ImGui::DockBuilderDockWindow("Dear ImGui Demo", dock_top);
+        ImGui::DockBuilderDockWindow("ImPlot Demo", dock_top);
+        ImGui::DockBuilderDockWindow("Hello, Bazel + ImGui + WebGL! V2", dock_top);
+        
+        // Dock spectrogram to bottom
+        ImGui::DockBuilderDockWindow("Spectrogram", dock_bottom);
+        
+        ImGui::DockBuilderFinish(dockspace_id);
+        
+        // Set Audio Nodes window to be focused on startup
+        ImGui::SetWindowFocus("Audio Nodes");
+    }
+    
     ImGui::End();
     
     // 1. Show the big demo window
@@ -158,6 +189,10 @@ void MainWindow::Draw()
     // 6. Show audio nodes window
     if (show_audio_nodes_window_)
         DrawAudioNodesWindow();
+    
+    // 7. Show spectrogram window
+    if (show_spectrogram_window_)
+        DrawSpectrogramWindow();
 
 }
 
@@ -321,6 +356,34 @@ void MainWindow::DrawAudioNodesWindow()
     // Draw the audio node graph
     if (audio_node_graph_) {
         audio_node_graph_->Draw();
+    }
+    
+    ImGui::End();
+}
+
+void MainWindow::DrawSpectrogramWindow()
+{
+    ImGui::Begin("Spectrogram", &show_spectrogram_window_);
+    
+    // Find the player node and delegate to its spectrogram view
+    if (audio_node_graph_) {
+        const auto& nodes = audio_node_graph_->GetNodes();
+        audio_nodes::PlayerNode* player_node = nullptr;
+        
+        for (const auto& [node_id, node] : nodes) {
+            if (node->GetNodeType() == audio_nodes::NodeType::kPlayer) {
+                player_node = static_cast<audio_nodes::PlayerNode*>(node.get());
+                break;
+            }
+        }
+        
+        if (player_node) {
+            player_node->DrawSpectrogramContent();
+        } else {
+            ImGui::TextWrapped("No player node found. Create a player node in the Audio Nodes window to see the spectrogram.");
+        }
+    } else {
+        ImGui::Text("Audio node graph not initialized.");
     }
     
     ImGui::End();

@@ -152,6 +152,9 @@ public:
     void UpdateAudio(int sample_rate);
     void OnGraphChanged();
     
+    // Draw spectrogram content (without window wrapper)
+    void DrawSpectrogramContent();
+    
 private:
     int input_pin_id_;
     AudioNode* input_;
@@ -173,7 +176,6 @@ private:
     bool capture_active_;
     bool capture_ready_;
     int capture_target_input_;
-    bool show_spectrogram_;
     std::deque<std::vector<float>> spectrogram_data_;
     size_t spectrogram_time_slices_;
     int fft_size_;
@@ -184,7 +186,6 @@ private:
 
     void AppendToHistory(const std::vector<float>& samples);
     void DrawHistoryWindow();
-    void DrawSpectrogramView();
     const float* PreparePlotData(const std::vector<float>& samples, int* sample_count);
     void UpdateStreaming(int sample_rate);
     bool QueueGeneratedAudio(int sample_rate);
@@ -228,6 +229,9 @@ public:
     
     // Access the editor context
     ax::NodeEditor::EditorContext* GetEditorContext() { return editor_context_; }
+    
+    // Access nodes (for external UI)
+    const std::map<int, std::unique_ptr<AudioNode>>& GetNodes() const { return nodes_; }
     
 private:
     struct Link {

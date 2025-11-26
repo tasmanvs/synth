@@ -39,7 +39,10 @@ private:
     // Node editor (for demo)
     ax::NodeEditor::EditorContext* node_editor_context_;
     bool node_editor_initialized_;
+    bool dockspace_initialized_;
+    bool show_spectrogram_window_;
     
     void DrawNodeEditorDemo();
     void DrawAudioNodesWindow();
+    void DrawSpectrogramWindow();
 };
