@@ -149,8 +149,23 @@ void MainWindow::DrawAudioNodesWindow()
             if (ImGui::MenuItem("Source Node")) {
                 audio_node_graph_->CreateSourceNode();
             }
+            if (ImGui::MenuItem("Harmonic Node")) {
+                audio_node_graph_->CreateHarmonicNode();
+            }
+            if (ImGui::MenuItem("White Noise")) {
+                audio_node_graph_->CreateWhiteNoiseNode();
+            }
             if (ImGui::MenuItem("Sum Node")) {
                 audio_node_graph_->CreateSumNode();
+            }
+            if (ImGui::MenuItem("Lowpass Filter")) {
+                audio_node_graph_->CreateLowpassFilterNode();
+            }
+            if (ImGui::MenuItem("Highpass Filter")) {
+                audio_node_graph_->CreateHighpassFilterNode();
+            }
+            if (ImGui::MenuItem("Bandpass Filter")) {
+                audio_node_graph_->CreateBandpassFilterNode();
             }
             if (ImGui::MenuItem("Player Node")) {
                 audio_node_graph_->CreatePlayerNode();

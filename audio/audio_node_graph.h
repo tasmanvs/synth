@@ -16,6 +16,10 @@ class AudioNode;
 class SourceNode;
 class SumNode;
 class PlayerNode;
+class BandpassFilterNode;
+class LowpassFilterNode;
+class HighpassFilterNode;
+class WhiteNoiseNode;
 class AudioNodeGraph;
 
 // Audio node types
@@ -23,7 +27,11 @@ enum class NodeType {
     kSource,
     kSum,
     kPlayer,
-    kHarmonic
+    kHarmonic,
+    kBandpassFilter,
+    kLowpassFilter,
+    kHighpassFilter,
+    kWhiteNoise
 };
 
 // Base class for all audio nodes
@@ -108,6 +116,104 @@ private:
     void UpdateHarmonics();
 };
 
+// Bandpass filter node: Filters input signal to a specific frequency range
+class BandpassFilterNode : public AudioNode {
+public:
+    BandpassFilterNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
+private:
+    int input_pin_id_;
+    AudioNode* input_;
+    float center_frequency_;
+    float bandwidth_;
+    
+    // Biquad filter coefficients
+    float b0_, b1_, b2_, a1_, a2_;
+    // Filter state (for continuous processing)
+    float x1_, x2_, y1_, y2_;
+    
+    void UpdateFilterCoefficients(int sample_rate);
+    float ProcessSample(float input);
+};
+
+// Lowpass filter node: Filters out high frequencies
+class LowpassFilterNode : public AudioNode {
+public:
+    LowpassFilterNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
+private:
+    int input_pin_id_;
+    AudioNode* input_;
+    float cutoff_frequency_;
+    bool show_bode_plot_;
+    
+    // Cascaded biquad filter coefficients (4 stages for 8th order filter)
+    static const int kNumStages_ = 4;
+    float b0_[kNumStages_], b1_[kNumStages_], b2_[kNumStages_];
+    float a1_[kNumStages_], a2_[kNumStages_];
+    // Filter state for each stage
+    float x1_[kNumStages_], x2_[kNumStages_];
+    float y1_[kNumStages_], y2_[kNumStages_];
+    
+    void UpdateFilterCoefficients(int sample_rate);
+    float ProcessSample(float input);
+    float ComputeFrequencyResponse(float frequency, int sample_rate);
+};
+
+// Highpass filter node: Filters out low frequencies
+class HighpassFilterNode : public AudioNode {
+public:
+    HighpassFilterNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
+private:
+    int input_pin_id_;
+    AudioNode* input_;
+    float cutoff_frequency_;
+    bool show_bode_plot_;
+    
+    // Cascaded biquad filter coefficients (4 stages for 8th order filter)
+    static const int kNumStages_ = 4;
+    float b0_[kNumStages_], b1_[kNumStages_], b2_[kNumStages_];
+    float a1_[kNumStages_], a2_[kNumStages_];
+    // Filter state for each stage
+    float x1_[kNumStages_], x2_[kNumStages_];
+    float y1_[kNumStages_], y2_[kNumStages_];
+    
+    void UpdateFilterCoefficients(int sample_rate);
+    float ProcessSample(float input);
+    float ComputeFrequencyResponse(float frequency, int sample_rate);
+};
+
+// White noise node: Generates random white noise
+class WhiteNoiseNode : public AudioNode {
+public:
+    WhiteNoiseNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+private:
+    float volume_;
+};
+
 // Sum node: Adds the output of one or more input nodes
 class SumNode : public AudioNode {
 public:
@@ -182,6 +288,8 @@ private:
     std::vector<float> fft_input_buffer_;
     int sample_rate_;
     int spectrogram_sample_counter_;
+    double frequency_axis_min_;
+    double frequency_axis_max_;
 
     void AppendToHistory(const std::vector<float>& samples);
     void DrawHistoryWindow();
@@ -205,6 +313,10 @@ public:
     HarmonicNode* CreateHarmonicNode();
     SumNode* CreateSumNode();
     PlayerNode* CreatePlayerNode();
+    BandpassFilterNode* CreateBandpassFilterNode();
+    LowpassFilterNode* CreateLowpassFilterNode();
+    HighpassFilterNode* CreateHighpassFilterNode();
+    WhiteNoiseNode* CreateWhiteNoiseNode();
     
     // Node management
     void DeleteNode(int node_id);

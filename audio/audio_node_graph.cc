@@ -201,6 +201,496 @@ bool HarmonicNode::HasParametersChanged() {
 }
 
 // ============================================================================
+// LowpassFilterNode Implementation
+// ============================================================================
+
+LowpassFilterNode::LowpassFilterNode(int node_id)
+    : AudioNode(node_id, NodeType::kLowpassFilter)
+    , input_pin_id_(node_id * 1000 + 501)
+    , input_(nullptr)
+    , cutoff_frequency_(1000.0f)
+    , show_bode_plot_(false) {
+    // Initialize all filter states to zero
+    for (int i = 0; i < kNumStages_; ++i) {
+        b0_[i] = b1_[i] = b2_[i] = 0.0f;
+        a1_[i] = a2_[i] = 0.0f;
+        x1_[i] = x2_[i] = 0.0f;
+        y1_[i] = y2_[i] = 0.0f;
+    }
+}
+
+void LowpassFilterNode::UpdateFilterCoefficients(int sample_rate) {
+    // Cascaded Butterworth lowpass filter for steeper rolloff
+    // Each stage uses the same coefficients for simplicity
+    float omega = 2.0f * 3.14159265359f * cutoff_frequency_ / sample_rate;
+    float Q = 0.707f; // Butterworth response for each stage
+    float alpha = std::sin(omega) / (2.0f * Q);
+    
+    float a0 = 1.0f + alpha;
+    float b0 = (1.0f - std::cos(omega)) / (2.0f * a0);
+    float b1 = (1.0f - std::cos(omega)) / a0;
+    float b2 = b0;
+    float a1 = -2.0f * std::cos(omega) / a0;
+    float a2 = (1.0f - alpha) / a0;
+    
+    // Apply same coefficients to all stages
+    for (int i = 0; i < kNumStages_; ++i) {
+        b0_[i] = b0;
+        b1_[i] = b1;
+        b2_[i] = b2;
+        a1_[i] = a1;
+        a2_[i] = a2;
+    }
+}
+
+float LowpassFilterNode::ProcessSample(float input) {
+    // Process through all cascaded stages
+    float signal = input;
+    for (int i = 0; i < kNumStages_; ++i) {
+        float output = b0_[i] * signal + b1_[i] * x1_[i] + b2_[i] * x2_[i] 
+                      - a1_[i] * y1_[i] - a2_[i] * y2_[i];
+        
+        x2_[i] = x1_[i];
+        x1_[i] = signal;
+        y2_[i] = y1_[i];
+        y1_[i] = output;
+        
+        signal = output;
+    }
+    
+    return signal;
+}
+
+float LowpassFilterNode::ComputeFrequencyResponse(float frequency, int sample_rate) {
+    // Compute the magnitude response for a given frequency
+    float omega = 2.0f * 3.14159265359f * frequency / sample_rate;
+    
+    // For each biquad stage, compute H(e^jw)
+    float total_magnitude = 1.0f;
+    for (int i = 0; i < kNumStages_; ++i) {
+        // Numerator: b0 + b1*e^(-jw) + b2*e^(-j2w)
+        float num_real = b0_[i] + b1_[i] * std::cos(omega) + b2_[i] * std::cos(2.0f * omega);
+        float num_imag = -b1_[i] * std::sin(omega) - b2_[i] * std::sin(2.0f * omega);
+        float num_mag = std::sqrt(num_real * num_real + num_imag * num_imag);
+        
+        // Denominator: 1 + a1*e^(-jw) + a2*e^(-j2w)
+        float den_real = 1.0f + a1_[i] * std::cos(omega) + a2_[i] * std::cos(2.0f * omega);
+        float den_imag = -a1_[i] * std::sin(omega) - a2_[i] * std::sin(2.0f * omega);
+        float den_mag = std::sqrt(den_real * den_real + den_imag * den_imag);
+        
+        total_magnitude *= (num_mag / den_mag);
+    }
+    
+    // Convert to dB
+    return 20.0f * std::log10(total_magnitude + 1e-10f);
+}
+
+std::vector<float> LowpassFilterNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (!input_ || num_samples <= 0) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    UpdateFilterCoefficients(sample_rate);
+    
+    auto input_data = input_->GenerateAudio(num_samples, sample_rate);
+    std::vector<float> output(num_samples);
+    
+    for (int i = 0; i < num_samples; ++i) {
+        output[i] = ProcessSample(input_data[i]);
+    }
+    
+    return output;
+}
+
+void LowpassFilterNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Lowpass Filter %d", node_id_);
+    
+    ed::BeginPin(input_pin_id_, ed::PinKind::Input);
+    ImGui::Text("-> In");
+    ed::EndPin();
+    
+    ImGui::PushItemWidth(120.0f);
+    ImGui::SliderFloat("Cutoff", &cutoff_frequency_, 20.0f, 20000.0f, "%.1f Hz", ImGuiSliderFlags_Logarithmic);
+    ImGui::PopItemWidth();
+    
+    if (ImGui::Button("Show Bode Plot")) {
+        show_bode_plot_ = true;
+    }
+    
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Out ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    
+    ImGui::PopID();
+    
+    // Draw bode plot in separate window
+    if (show_bode_plot_) {
+        ed::Suspend();
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+        char window_name[64];
+        snprintf(window_name, sizeof(window_name), "Lowpass Bode Plot ##%d", node_id_);
+        if (ImGui::Begin(window_name, &show_bode_plot_, ImGuiWindowFlags_None)) {
+            const int num_points = 100;
+            static float plot_data[100];
+            const int sample_rate = 48000;
+            
+            UpdateFilterCoefficients(sample_rate);
+            
+            for (int i = 0; i < num_points; ++i) {
+                float freq = 20.0f * std::pow(20000.0f / 20.0f, static_cast<float>(i) / (num_points - 1));
+                plot_data[i] = ComputeFrequencyResponse(freq, sample_rate);
+            }
+            
+            if (ImPlot::BeginPlot("Frequency Response", ImVec2(-1, -1))) {
+                ImPlot::SetupAxes("Frequency (Hz)", "Magnitude (dB)");
+                ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+                ImPlot::SetupAxesLimits(20, 20000, -80, 10, ImPlotCond_Once);
+                ImPlot::PlotLine("Response", plot_data, num_points, 1.0, 20.0, ImPlotLineFlags_None, 0, sizeof(float));
+                ImPlot::EndPlot();
+            }
+        }
+        ImGui::End();
+        ed::Resume();
+    }
+}
+
+bool LowpassFilterNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (pin_id != input_pin_id_) return false;
+    input_ = input_node;
+    return true;
+}
+
+void LowpassFilterNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (input_ == input_node && pin_id == input_pin_id_) {
+        input_ = nullptr;
+    }
+}
+
+// ============================================================================
+// HighpassFilterNode Implementation
+// ============================================================================
+
+HighpassFilterNode::HighpassFilterNode(int node_id)
+    : AudioNode(node_id, NodeType::kHighpassFilter)
+    , input_pin_id_(node_id * 1000 + 502)
+    , input_(nullptr)
+    , cutoff_frequency_(1000.0f)
+    , show_bode_plot_(false) {
+    // Initialize all filter states to zero
+    for (int i = 0; i < kNumStages_; ++i) {
+        b0_[i] = b1_[i] = b2_[i] = 0.0f;
+        a1_[i] = a2_[i] = 0.0f;
+        x1_[i] = x2_[i] = 0.0f;
+        y1_[i] = y2_[i] = 0.0f;
+    }
+}
+
+void HighpassFilterNode::UpdateFilterCoefficients(int sample_rate) {
+    // Cascaded Butterworth highpass filter for steeper rolloff
+    // Each stage uses the same coefficients for simplicity
+    float omega = 2.0f * 3.14159265359f * cutoff_frequency_ / sample_rate;
+    float Q = 0.707f; // Butterworth response for each stage
+    float alpha = std::sin(omega) / (2.0f * Q);
+    
+    float a0 = 1.0f + alpha;
+    float b0 = (1.0f + std::cos(omega)) / (2.0f * a0);
+    float b1 = -(1.0f + std::cos(omega)) / a0;
+    float b2 = b0;
+    float a1 = -2.0f * std::cos(omega) / a0;
+    float a2 = (1.0f - alpha) / a0;
+    
+    // Apply same coefficients to all stages
+    for (int i = 0; i < kNumStages_; ++i) {
+        b0_[i] = b0;
+        b1_[i] = b1;
+        b2_[i] = b2;
+        a1_[i] = a1;
+        a2_[i] = a2;
+    }
+}
+
+float HighpassFilterNode::ProcessSample(float input) {
+    // Process through all cascaded stages
+    float signal = input;
+    for (int i = 0; i < kNumStages_; ++i) {
+        float output = b0_[i] * signal + b1_[i] * x1_[i] + b2_[i] * x2_[i] 
+                      - a1_[i] * y1_[i] - a2_[i] * y2_[i];
+        
+        x2_[i] = x1_[i];
+        x1_[i] = signal;
+        y2_[i] = y1_[i];
+        y1_[i] = output;
+        
+        signal = output;
+    }
+    
+    return signal;
+}
+
+float HighpassFilterNode::ComputeFrequencyResponse(float frequency, int sample_rate) {
+    // Compute the magnitude response for a given frequency
+    float omega = 2.0f * 3.14159265359f * frequency / sample_rate;
+    
+    // For each biquad stage, compute H(e^jw)
+    float total_magnitude = 1.0f;
+    for (int i = 0; i < kNumStages_; ++i) {
+        // Numerator: b0 + b1*e^(-jw) + b2*e^(-j2w)
+        float num_real = b0_[i] + b1_[i] * std::cos(omega) + b2_[i] * std::cos(2.0f * omega);
+        float num_imag = -b1_[i] * std::sin(omega) - b2_[i] * std::sin(2.0f * omega);
+        float num_mag = std::sqrt(num_real * num_real + num_imag * num_imag);
+        
+        // Denominator: 1 + a1*e^(-jw) + a2*e^(-j2w)
+        float den_real = 1.0f + a1_[i] * std::cos(omega) + a2_[i] * std::cos(2.0f * omega);
+        float den_imag = -a1_[i] * std::sin(omega) - a2_[i] * std::sin(2.0f * omega);
+        float den_mag = std::sqrt(den_real * den_real + den_imag * den_imag);
+        
+        total_magnitude *= (num_mag / den_mag);
+    }
+    
+    // Convert to dB
+    return 20.0f * std::log10(total_magnitude + 1e-10f);
+}
+
+std::vector<float> HighpassFilterNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (!input_ || num_samples <= 0) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    UpdateFilterCoefficients(sample_rate);
+    
+    auto input_data = input_->GenerateAudio(num_samples, sample_rate);
+    std::vector<float> output(num_samples);
+    
+    for (int i = 0; i < num_samples; ++i) {
+        output[i] = ProcessSample(input_data[i]);
+    }
+    
+    return output;
+}
+
+void HighpassFilterNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Highpass Filter %d", node_id_);
+    
+    ed::BeginPin(input_pin_id_, ed::PinKind::Input);
+    ImGui::Text("-> In");
+    ed::EndPin();
+    
+    ImGui::PushItemWidth(120.0f);
+    ImGui::SliderFloat("Cutoff", &cutoff_frequency_, 20.0f, 20000.0f, "%.1f Hz", ImGuiSliderFlags_Logarithmic);
+    ImGui::PopItemWidth();
+    
+    if (ImGui::Button("Show Bode Plot")) {
+        show_bode_plot_ = true;
+    }
+    
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Out ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    
+    ImGui::PopID();
+    
+    // Draw bode plot in separate window
+    if (show_bode_plot_) {
+        ed::Suspend();
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+        char window_name[64];
+        snprintf(window_name, sizeof(window_name), "Highpass Bode Plot ##%d", node_id_);
+        if (ImGui::Begin(window_name, &show_bode_plot_, ImGuiWindowFlags_None)) {
+            const int num_points = 100;
+            static float plot_data[100];
+            const int sample_rate = 48000;
+            
+            UpdateFilterCoefficients(sample_rate);
+            
+            for (int i = 0; i < num_points; ++i) {
+                float freq = 20.0f * std::pow(20000.0f / 20.0f, static_cast<float>(i) / (num_points - 1));
+                plot_data[i] = ComputeFrequencyResponse(freq, sample_rate);
+            }
+            
+            if (ImPlot::BeginPlot("Frequency Response", ImVec2(-1, -1))) {
+                ImPlot::SetupAxes("Frequency (Hz)", "Magnitude (dB)");
+                ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
+                ImPlot::SetupAxesLimits(20, 20000, -80, 10, ImPlotCond_Once);
+                ImPlot::PlotLine("Response", plot_data, num_points, 1.0, 20.0, ImPlotLineFlags_None, 0, sizeof(float));
+                ImPlot::EndPlot();
+            }
+        }
+        ImGui::End();
+        ed::Resume();
+    }
+}
+
+bool HighpassFilterNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (pin_id != input_pin_id_) return false;
+    input_ = input_node;
+    return true;
+}
+
+void HighpassFilterNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (input_ == input_node && pin_id == input_pin_id_) {
+        input_ = nullptr;
+    }
+}
+
+// ============================================================================
+// WhiteNoiseNode Implementation
+// ============================================================================
+
+WhiteNoiseNode::WhiteNoiseNode(int node_id)
+    : AudioNode(node_id, NodeType::kWhiteNoise)
+    , volume_(0.3f) {
+}
+
+std::vector<float> WhiteNoiseNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (num_samples <= 0) {
+        return {};
+    }
+    
+    std::vector<float> output(num_samples);
+    
+    // Generate white noise: random values between -1 and 1
+    for (int i = 0; i < num_samples; ++i) {
+        // Generate random float between -1.0 and 1.0
+        float random_value = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        random_value = (random_value * 2.0f - 1.0f) * volume_;
+        output[i] = random_value;
+    }
+    
+    return output;
+}
+
+void WhiteNoiseNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("White Noise %d", node_id_);
+    ImGui::PushItemWidth(120.0f);
+    ImGui::SliderFloat("Volume", &volume_, 0.0f, 1.0f, "%.2f");
+    ImGui::PopItemWidth();
+    
+    // Output pin
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Out ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    ImGui::PopID();
+}
+
+// ============================================================================
+// BandpassFilterNode Implementation
+// ============================================================================
+
+BandpassFilterNode::BandpassFilterNode(int node_id)
+    : AudioNode(node_id, NodeType::kBandpassFilter)
+    , input_pin_id_(node_id * 1000 + 500)
+    , input_(nullptr)
+    , center_frequency_(1000.0f)
+    , bandwidth_(200.0f)
+    , b0_(0.0f), b1_(0.0f), b2_(0.0f), a1_(0.0f), a2_(0.0f)
+    , x1_(0.0f), x2_(0.0f), y1_(0.0f), y2_(0.0f) {
+}
+
+void BandpassFilterNode::UpdateFilterCoefficients(int sample_rate) {
+    // Biquad bandpass filter design
+    float omega = 2.0f * 3.14159265359f * center_frequency_ / sample_rate;
+    float alpha = std::sin(omega) * std::sinh(std::log(2.0f) / 2.0f * bandwidth_ * omega / std::sin(omega));
+    
+    float a0 = 1.0f + alpha;
+    b0_ = alpha / a0;
+    b1_ = 0.0f;
+    b2_ = -alpha / a0;
+    a1_ = -2.0f * std::cos(omega) / a0;
+    a2_ = (1.0f - alpha) / a0;
+}
+
+float BandpassFilterNode::ProcessSample(float input) {
+    float output = b0_ * input + b1_ * x1_ + b2_ * x2_ - a1_ * y1_ - a2_ * y2_;
+    
+    // Update state
+    x2_ = x1_;
+    x1_ = input;
+    y2_ = y1_;
+    y1_ = output;
+    
+    return output;
+}
+
+std::vector<float> BandpassFilterNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (!input_ || num_samples <= 0) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    UpdateFilterCoefficients(sample_rate);
+    
+    auto input_data = input_->GenerateAudio(num_samples, sample_rate);
+    std::vector<float> output(num_samples);
+    
+    for (int i = 0; i < num_samples; ++i) {
+        output[i] = ProcessSample(input_data[i]);
+    }
+    
+    return output;
+}
+
+void BandpassFilterNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Bandpass Filter %d", node_id_);
+    
+    // Input pin
+    ed::BeginPin(input_pin_id_, ed::PinKind::Input);
+    ImGui::Text("-> In");
+    ed::EndPin();
+    
+    ImGui::PushItemWidth(120.0f);
+    ImGui::SliderFloat("Center Freq", &center_frequency_, 20.0f, 20000.0f, "%.1f Hz", ImGuiSliderFlags_Logarithmic);
+    ImGui::SliderFloat("Bandwidth", &bandwidth_, 10.0f, 5000.0f, "%.1f Hz", ImGuiSliderFlags_Logarithmic);
+    ImGui::PopItemWidth();
+    
+    // Output pin
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Out ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    ImGui::PopID();
+}
+
+bool BandpassFilterNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (pin_id != input_pin_id_) return false;
+    input_ = input_node;
+    return true;
+}
+
+void BandpassFilterNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (input_ == input_node && pin_id == input_pin_id_) {
+        input_ = nullptr;
+    }
+}
+
+// ============================================================================
 // SumNode Implementation
 // ============================================================================
 
@@ -403,7 +893,9 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , fft_size_(512)
     , fft_input_buffer_(fft_size_, 0.0f)
     , sample_rate_(48000)
-    , spectrogram_sample_counter_(0) {
+    , spectrogram_sample_counter_(0)
+    , frequency_axis_min_(0.0)
+    , frequency_axis_max_(24000.0) {
     // Initialize Hann window for FFT
     fft_window_.resize(fft_size_);
     for (int i = 0; i < fft_size_; ++i) {
@@ -832,6 +1324,10 @@ void PlayerNode::DrawSpectrogramContent() {
         return;
     }
     
+    // Get available content region
+    ImVec2 available = ImGui::GetContentRegionAvail();
+    float plot_width = (available.x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
+    
     // Flatten spectrogram data for PlotHeatmap
     // PlotHeatmap expects data[row][col] in row-major order
     // Our data: spectrogram_data_[time_slice][freq_bin]
@@ -846,10 +1342,13 @@ void PlayerNode::DrawSpectrogramContent() {
         }
     }
     
-    // Draw spectrogram as a heatmap
-    if (ImPlot::BeginPlot("Spectrogram", ImVec2(-1, -1))) {
+    float max_frequency = static_cast<float>(sample_rate_) / 2.0f;
+    frequency_axis_max_ = static_cast<double>(max_frequency);
+    
+    // Left plot: Spectrogram
+    if (ImPlot::BeginPlot("Spectrogram", ImVec2(plot_width, -1))) {
         ImPlot::SetupAxes("Time Slice", "Frequency (Hz)");
-        float max_frequency = static_cast<float>(sample_rate_) / 2.0f;
+        ImPlot::SetupAxisLinks(ImAxis_Y1, &frequency_axis_min_, &frequency_axis_max_);
         
         // Set up bounds for the heatmap in plot coordinates
         // Flip Y-axis: row 0 (lowest freq) should be at bottom, so bounds_min.y > bounds_max.y
@@ -868,6 +1367,39 @@ void PlayerNode::DrawSpectrogramContent() {
                            -80.0, 0.0, nullptr, bounds_min, bounds_max);
         
         ImPlot::PopColormap();
+        
+        ImPlot::EndPlot();
+    }
+    
+    ImGui::SameLine();
+    
+    // Right plot: Power Spectral Density (current spectrum)
+    if (ImPlot::BeginPlot("Power Spectral Density", ImVec2(plot_width, -1))) {
+        ImPlot::SetupAxes("Frequency (Hz)", "Magnitude (dB)");
+        ImPlot::SetupAxisLinks(ImAxis_X1, &frequency_axis_min_, &frequency_axis_max_);
+        ImPlot::SetupAxesLimits(0, static_cast<double>(max_frequency),
+                               -80, 0,
+                               ImPlotCond_Once);
+        
+        // Use the most recent spectrum data
+        if (!spectrogram_data_.empty()) {
+            const auto& latest_spectrum = spectrogram_data_.back();
+            int num_bins = static_cast<int>(latest_spectrum.size());
+            
+            // Create frequency axis data
+            std::vector<double> frequencies(num_bins);
+            for (int i = 0; i < num_bins; ++i) {
+                frequencies[i] = (static_cast<double>(i) / num_bins) * max_frequency;
+            }
+            
+            // Convert to double for plotting
+            std::vector<double> magnitudes(num_bins);
+            for (int i = 0; i < num_bins; ++i) {
+                magnitudes[i] = static_cast<double>(latest_spectrum[i]);
+            }
+            
+            ImPlot::PlotLine("PSD", frequencies.data(), magnitudes.data(), num_bins);
+        }
         
         ImPlot::EndPlot();
     }
@@ -938,6 +1470,60 @@ SumNode* AudioNodeGraph::CreateSumNode() {
     return node_ptr;
 }
 
+BandpassFilterNode* AudioNodeGraph::CreateBandpassFilterNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<BandpassFilterNode>(node_id);
+    auto* node_ptr = node.get();
+    
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 1000 + 500, node_id);  // Input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created bandpass filter node: " << node_id;
+    return node_ptr;
+}
+
+LowpassFilterNode* AudioNodeGraph::CreateLowpassFilterNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<LowpassFilterNode>(node_id);
+    auto* node_ptr = node.get();
+    
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 1000 + 501, node_id);  // Input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created lowpass filter node: " << node_id;
+    return node_ptr;
+}
+
+HighpassFilterNode* AudioNodeGraph::CreateHighpassFilterNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<HighpassFilterNode>(node_id);
+    auto* node_ptr = node.get();
+    
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 1000 + 502, node_id);  // Input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created highpass filter node: " << node_id;
+    return node_ptr;
+}
+
+WhiteNoiseNode* AudioNodeGraph::CreateWhiteNoiseNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<WhiteNoiseNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created white noise node: " << node_id;
+    return node_ptr;
+}
+
 PlayerNode* AudioNodeGraph::CreatePlayerNode() {
     // Only allow one player node
     if (player_node_) {
@@ -961,13 +1547,21 @@ void AudioNodeGraph::DeleteNode(int node_id) {
     auto it = nodes_.find(node_id);
     if (it == nodes_.end()) return;
     
-    // Remove all links connected to this node
+    // First, disconnect all input/output connections
     auto link_it = links_.begin();
     while (link_it != links_.end()) {
-        int start_node = GetNodeIdForPin(link_it->start_pin_id);
-        int end_node = GetNodeIdForPin(link_it->end_pin_id);
+        int start_node_id = GetNodeIdForPin(link_it->start_pin_id);
+        int end_node_id = GetNodeIdForPin(link_it->end_pin_id);
         
-        if (start_node == node_id || end_node == node_id) {
+        if (start_node_id == node_id || end_node_id == node_id) {
+            // Properly disconnect the nodes
+            AudioNode* start_node = GetNode(start_node_id);
+            AudioNode* end_node = GetNode(end_node_id);
+            
+            if (start_node && end_node) {
+                end_node->RemoveInput(start_node, link_it->end_pin_id);
+            }
+            
             link_it = links_.erase(link_it);
         } else {
             ++link_it;
@@ -1179,8 +1773,20 @@ void AudioNodeGraph::Draw() {
         if (ImGui::MenuItem("Harmonic Node")) {
             CreateHarmonicNode();
         }
+        if (ImGui::MenuItem("White Noise")) {
+            CreateWhiteNoiseNode();
+        }
         if (ImGui::MenuItem("Sum Node")) {
             CreateSumNode();
+        }
+        if (ImGui::MenuItem("Lowpass Filter")) {
+            CreateLowpassFilterNode();
+        }
+        if (ImGui::MenuItem("Highpass Filter")) {
+            CreateHighpassFilterNode();
+        }
+        if (ImGui::MenuItem("Bandpass Filter")) {
+            CreateBandpassFilterNode();
         }
         if (ImGui::MenuItem("Player Node")) {
             if (!player_node_) {
