@@ -1406,10 +1406,6 @@ void PlayerNode::DrawSpectrogramContent() {
         return;
     }
     
-    // Get available content region
-    ImVec2 available = ImGui::GetContentRegionAvail();
-    float plot_width = (available.x - ImGui::GetStyle().ItemSpacing.x) * 0.5f;
-    
     // Flatten spectrogram data for PlotHeatmap
     // PlotHeatmap expects data[row][col] in row-major order
     // Our data: spectrogram_data_[time_slice][freq_bin]
@@ -1425,75 +1421,78 @@ void PlayerNode::DrawSpectrogramContent() {
     }
     
     float max_frequency = static_cast<float>(sample_rate_) / 2.0f;
-    frequency_axis_max_ = static_cast<double>(max_frequency);
     
-    // Left plot: Spectrogram
-    if (ImPlot::BeginPlot("Spectrogram", ImVec2(plot_width, -1))) {
-        ImPlot::SetupAxes("Time Slice", "Frequency (Hz)");
-        ImPlot::SetupAxisLinks(ImAxis_Y1, &frequency_axis_min_, &frequency_axis_max_);
-        
-        // Set up bounds for the heatmap in plot coordinates
-        // Flip Y-axis: row 0 (lowest freq) should be at bottom, so bounds_min.y > bounds_max.y
-        ImPlotPoint bounds_min(0, max_frequency);
-        ImPlotPoint bounds_max(cols, 0);
-        
-        ImPlot::SetupAxesLimits(0, static_cast<double>(cols),
-                               0, static_cast<double>(max_frequency),
-                               ImPlotCond_Once);
-        
-        // Use a colormap suitable for spectrograms (Viridis, Hot, or Plasma work well)
-        ImPlot::PushColormap(ImPlotColormap_Hot);
-        
-        // Plot heatmap with dB range as scale
-        ImPlot::PlotHeatmap("##heatmap", heatmap_data.data(), rows, cols, 
-                           -80.0, 0.0, nullptr, bounds_min, bounds_max);
-        
-        ImPlot::PopColormap();
-        
-        // Update linked variables from plot limits after user interaction
-        ImPlotRect limits = ImPlot::GetPlotLimits(ImAxis_X1, ImAxis_Y1);
-        frequency_axis_min_ = limits.Y.Min;
-        frequency_axis_max_ = limits.Y.Max;
-        
-        ImPlot::EndPlot();
+    // Initialize frequency axis limits if needed
+    if (frequency_axis_min_ == 0.0 && frequency_axis_max_ == 24000.0) {
+        frequency_axis_min_ = 0.0;
+        frequency_axis_max_ = static_cast<double>(max_frequency);
     }
     
-    ImGui::SameLine();
-    
-    // Right plot: Power Spectral Density (current spectrum)
-    if (ImPlot::BeginPlot("Power Spectral Density", ImVec2(plot_width, -1))) {
-        ImPlot::SetupAxes("Frequency (Hz)", "Magnitude (dB)");
-        ImPlot::SetupAxisLinks(ImAxis_X1, &frequency_axis_min_, &frequency_axis_max_);
-        ImPlot::SetupAxesLimits(0, static_cast<double>(max_frequency),
-                               -80, 0,
-                               ImPlotCond_Once);
+    // Use subplots: Spectrogram on left, PSD on right
+    if (ImPlot::BeginSubplots("Spectrum Analysis", 1, 2, ImVec2(-1, -1))) {
+        // Left subplot: Spectrogram (Time vs Frequency)
+        // Link Y-axis (frequency) to shared variables BEFORE BeginPlot
+        ImPlot::SetNextAxisLinks(ImAxis_Y1, &frequency_axis_min_, &frequency_axis_max_);
         
-        // Use the most recent spectrum data
-        if (!spectrogram_data_.empty()) {
-            const auto& latest_spectrum = spectrogram_data_.back();
-            int num_bins = static_cast<int>(latest_spectrum.size());
+        if (ImPlot::BeginPlot("Spectrogram")) {
+            ImPlot::SetupAxes("Time Slice", "Frequency (Hz)");
             
-            // Create frequency axis data
-            std::vector<double> frequencies(num_bins);
-            for (int i = 0; i < num_bins; ++i) {
-                frequencies[i] = (static_cast<double>(i) / num_bins) * max_frequency;
-            }
+            // Set up bounds for the heatmap in plot coordinates
+            // Flip Y-axis: row 0 (lowest freq) should be at bottom, so bounds_min.y > bounds_max.y
+            ImPlotPoint bounds_min(0, max_frequency);
+            ImPlotPoint bounds_max(cols, 0);
             
-            // Convert to double for plotting
-            std::vector<double> magnitudes(num_bins);
-            for (int i = 0; i < num_bins; ++i) {
-                magnitudes[i] = static_cast<double>(latest_spectrum[i]);
-            }
+            ImPlot::SetupAxesLimits(0, static_cast<double>(cols),
+                                   0, static_cast<double>(max_frequency),
+                                   ImPlotCond_Once);
             
-            ImPlot::PlotLine("PSD", frequencies.data(), magnitudes.data(), num_bins);
+            // Use a colormap suitable for spectrograms (Viridis, Hot, or Plasma work well)
+            ImPlot::PushColormap(ImPlotColormap_Hot);
+            
+            // Plot heatmap with dB range as scale
+            ImPlot::PlotHeatmap("##heatmap", heatmap_data.data(), rows, cols, 
+                               -80.0, 0.0, nullptr, bounds_min, bounds_max);
+            
+            ImPlot::PopColormap();
+            
+            ImPlot::EndPlot();
         }
         
-        // Update linked variables from plot limits after user interaction
-        ImPlotRect limits = ImPlot::GetPlotLimits(ImAxis_X1, ImAxis_Y1);
-        frequency_axis_min_ = limits.X.Min;
-        frequency_axis_max_ = limits.X.Max;
+        // Right subplot: Power Spectral Density (Frequency vs Magnitude)
+        // Link X-axis (frequency) to shared variables BEFORE BeginPlot
+        ImPlot::SetNextAxisLinks(ImAxis_X1, &frequency_axis_min_, &frequency_axis_max_);
         
-        ImPlot::EndPlot();
+        if (ImPlot::BeginPlot("Power Spectral Density")) {
+            ImPlot::SetupAxes("Frequency (Hz)", "Magnitude (dB)");
+            
+            ImPlot::SetupAxesLimits(0, static_cast<double>(max_frequency),
+                                   -80, 0,
+                                   ImPlotCond_Once);
+            
+            // Use the most recent spectrum data
+            if (!spectrogram_data_.empty()) {
+                const auto& latest_spectrum = spectrogram_data_.back();
+                int num_bins = static_cast<int>(latest_spectrum.size());
+                
+                // Create frequency axis data
+                std::vector<double> frequencies(num_bins);
+                for (int i = 0; i < num_bins; ++i) {
+                    frequencies[i] = (static_cast<double>(i) / num_bins) * max_frequency;
+                }
+                
+                // Convert to double for plotting
+                std::vector<double> magnitudes(num_bins);
+                for (int i = 0; i < num_bins; ++i) {
+                    magnitudes[i] = static_cast<double>(latest_spectrum[i]);
+                }
+                
+                ImPlot::PlotLine("PSD", frequencies.data(), magnitudes.data(), num_bins);
+            }
+            
+            ImPlot::EndPlot();
+        }
+        
+        ImPlot::EndSubplots();
     }
 }
 
