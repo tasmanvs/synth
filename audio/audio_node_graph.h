@@ -188,17 +188,18 @@ private:
     int input_pin_id_;
     AudioNode* input_;
     float cutoff_frequency_;
+    int filter_order_;
     bool show_bode_plot_;
     
-    // Cascaded biquad filter coefficients (4 stages for 8th order filter)
-    static const int kNumStages_ = 4;
-    float b0_[kNumStages_], b1_[kNumStages_], b2_[kNumStages_];
-    float a1_[kNumStages_], a2_[kNumStages_];
+    // Dynamic cascaded biquad filter coefficients
+    std::vector<float> b0_, b1_, b2_;
+    std::vector<float> a1_, a2_;
     // Filter state for each stage
-    float x1_[kNumStages_], x2_[kNumStages_];
-    float y1_[kNumStages_], y2_[kNumStages_];
+    std::vector<float> x1_, x2_;
+    std::vector<float> y1_, y2_;
     
     void UpdateFilterCoefficients(int sample_rate);
+    void ResizeFilterArrays();
     float ProcessSample(float input);
     float ComputeFrequencyResponse(float frequency, int sample_rate);
 };
