@@ -212,6 +212,7 @@ LowpassFilterNode::LowpassFilterNode(int node_id)
     , filter_order_(8)
     , show_bode_plot_(false) {
     ResizeFilterArrays();
+    UpdateFilterCoefficients(48000); // Initialize with default sample rate
 }
 
 void LowpassFilterNode::ResizeFilterArrays() {
@@ -382,7 +383,7 @@ void LowpassFilterNode::Draw() {
     }
     
     int prev_order = filter_order_;
-    if (ImGui::SliderInt("Order", &filter_order_, 1, 16)) {
+    if (ImGui::SliderInt("Order", &filter_order_, 1, 64)) {
         if (filter_order_ != prev_order) {
             params_changed = true;
         }
@@ -416,6 +417,7 @@ void LowpassFilterNode::Draw() {
         snprintf(window_name, sizeof(window_name), "Lowpass Bode Plot ##%d", node_id_);
         if (ImGui::Begin(window_name, &show_bode_plot_, ImGuiWindowFlags_None)) {
             const int num_points = 100;
+            static float freq_data[100];
             static float plot_data[100];
             const int sample_rate = 48000;
             
@@ -426,13 +428,15 @@ void LowpassFilterNode::Draw() {
             
             for (int i = 0; i < num_points; ++i) {
                 float freq = 20.0f * std::pow(20000.0f / 20.0f, static_cast<float>(i) / (num_points - 1));
+                freq_data[i] = freq;
                 plot_data[i] = ComputeFrequencyResponse(freq, sample_rate);
             }
             
             if (ImPlot::BeginPlot("Frequency Response", ImVec2(-1, -1))) {
                 ImPlot::SetupAxes("Frequency (Hz)", "Magnitude (dB)");
+                ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
                 ImPlot::SetupAxesLimits(20, 20000, -80, 10, ImPlotCond_Once);
-                ImPlot::PlotLine("Response", plot_data, num_points, 1.0, 20.0, ImPlotLineFlags_None, 0, sizeof(float));
+                ImPlot::PlotLine("Response", freq_data, plot_data, num_points);
                 ImPlot::EndPlot();
             }
         }
