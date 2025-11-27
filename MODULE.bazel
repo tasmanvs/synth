@@ -13,6 +13,9 @@ bazel_dep(name = "googletest", version = "1.15.2")
 bazel_dep(name = "pocketfft", version = "0.0.2")
 bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
 
+# HTTP archive for external dependencies
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
 git_override(
     module_name = "hedron_compile_commands",
     remote = "https://github.com/hedronvision/bazel-compile-commands-extractor.git",
@@ -30,4 +33,13 @@ archive_override(
         "//third_party:imgui_build.patch",
     ],
     patch_strip = 1,
+)
+
+# liquid-dsp DSP library
+http_archive(
+    name = "liquid_dsp",
+    urls = ["https://github.com/jgaeddert/liquid-dsp/archive/refs/tags/v1.6.0.tar.gz"],
+    strip_prefix = "liquid-dsp-1.6.0",
+    build_file = "//third_party:liquid_dsp.BUILD",
+    sha256 = "6ee6a5dfb48e047b118cf613c0b9f43e34356a5667a77a72a55371d2c8c53bf5",
 )
