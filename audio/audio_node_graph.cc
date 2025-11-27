@@ -1450,6 +1450,11 @@ void PlayerNode::DrawSpectrogramContent() {
         
         ImPlot::PopColormap();
         
+        // Update linked variables from plot limits after user interaction
+        ImPlotRect limits = ImPlot::GetPlotLimits(ImAxis_X1, ImAxis_Y1);
+        frequency_axis_min_ = limits.Y.Min;
+        frequency_axis_max_ = limits.Y.Max;
+        
         ImPlot::EndPlot();
     }
     
@@ -1482,6 +1487,11 @@ void PlayerNode::DrawSpectrogramContent() {
             
             ImPlot::PlotLine("PSD", frequencies.data(), magnitudes.data(), num_bins);
         }
+        
+        // Update linked variables from plot limits after user interaction
+        ImPlotRect limits = ImPlot::GetPlotLimits(ImAxis_X1, ImAxis_Y1);
+        frequency_axis_min_ = limits.X.Min;
+        frequency_axis_max_ = limits.X.Max;
         
         ImPlot::EndPlot();
     }
