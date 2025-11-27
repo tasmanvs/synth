@@ -351,7 +351,6 @@ void LowpassFilterNode::Draw() {
             
             if (ImPlot::BeginPlot("Frequency Response", ImVec2(-1, -1))) {
                 ImPlot::SetupAxes("Frequency (Hz)", "Magnitude (dB)");
-                ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
                 ImPlot::SetupAxesLimits(20, 20000, -80, 10, ImPlotCond_Once);
                 ImPlot::PlotLine("Response", plot_data, num_points, 1.0, 20.0, ImPlotLineFlags_None, 0, sizeof(float));
                 ImPlot::EndPlot();
@@ -525,7 +524,6 @@ void HighpassFilterNode::Draw() {
             
             if (ImPlot::BeginPlot("Frequency Response", ImVec2(-1, -1))) {
                 ImPlot::SetupAxes("Frequency (Hz)", "Magnitude (dB)");
-                ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
                 ImPlot::SetupAxesLimits(20, 20000, -80, 10, ImPlotCond_Once);
                 ImPlot::PlotLine("Response", plot_data, num_points, 1.0, 20.0, ImPlotLineFlags_None, 0, sizeof(float));
                 ImPlot::EndPlot();
