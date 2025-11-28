@@ -20,6 +20,7 @@ class BandpassFilterNode;
 class LowpassFilterNode;
 class HighpassFilterNode;
 class WhiteNoiseNode;
+class NormalizerNode;
 class AudioNodeGraph;
 
 // Audio node types
@@ -31,7 +32,8 @@ enum class NodeType {
     kBandpassFilter,
     kLowpassFilter,
     kHighpassFilter,
-    kWhiteNoise
+    kWhiteNoise,
+    kNormalizer
 };
 
 // Base class for all audio nodes
@@ -229,6 +231,28 @@ private:
     float volume_;
 };
 
+// Normalizer node: Dynamically applies gain to normalize the incoming signal
+class NormalizerNode : public AudioNode {
+public:
+    NormalizerNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
+private:
+    int input_pin_id_;
+    AudioNode* input_;
+    float target_level_;       // Target peak level (0.0 to 1.0)
+    float attack_time_;        // Attack time in seconds
+    float release_time_;       // Release time in seconds
+    float current_gain_;       // Current applied gain
+    float peak_level_;         // Tracked peak level
+    float smoothing_factor_;   // For exponential moving average
+};
+
 // Sum node: Adds the output of one or more input nodes
 class SumNode : public AudioNode {
 public:
@@ -332,6 +356,7 @@ public:
     LowpassFilterNode* CreateLowpassFilterNode();
     HighpassFilterNode* CreateHighpassFilterNode();
     WhiteNoiseNode* CreateWhiteNoiseNode();
+    NormalizerNode* CreateNormalizerNode();
     
     // Node management
     void DeleteNode(int node_id);

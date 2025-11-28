@@ -845,6 +845,118 @@ void WhiteNoiseNode::Draw() {
 }
 
 // ============================================================================
+// NormalizerNode Implementation
+// ============================================================================
+
+NormalizerNode::NormalizerNode(int node_id)
+    : AudioNode(node_id, NodeType::kNormalizer)
+    , input_pin_id_(node_id * 1000 + 500)
+    , input_(nullptr)
+    , target_level_(0.8f)
+    , attack_time_(0.01f)
+    , release_time_(0.1f)
+    , current_gain_(1.0f)
+    , peak_level_(0.0f)
+    , smoothing_factor_(0.99f) {
+}
+
+bool NormalizerNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (input_ != nullptr) {
+        return false;  // Already have an input
+    }
+    input_ = input_node;
+    return true;
+}
+
+void NormalizerNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (input_ == input_node) {
+        input_ = nullptr;
+    }
+}
+
+std::vector<float> NormalizerNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (!input_ || num_samples <= 0) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    // Get input audio
+    std::vector<float> input_audio = input_->GenerateAudio(num_samples, sample_rate);
+    if (input_audio.empty()) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    std::vector<float> output(num_samples);
+    
+    // Calculate attack and release coefficients based on sample rate
+    float attack_coeff = 1.0f - std::exp(-1.0f / (attack_time_ * sample_rate));
+    float release_coeff = 1.0f - std::exp(-1.0f / (release_time_ * sample_rate));
+    
+    // Process each sample
+    for (int i = 0; i < num_samples; ++i) {
+        float input_sample = input_audio[i];
+        float abs_sample = std::abs(input_sample);
+        
+        // Update peak level with attack/release
+        if (abs_sample > peak_level_) {
+            peak_level_ += attack_coeff * (abs_sample - peak_level_);
+        } else {
+            peak_level_ += release_coeff * (abs_sample - peak_level_);
+        }
+        
+        // Calculate desired gain
+        float desired_gain = 1.0f;
+        if (peak_level_ > 0.0001f) {
+            desired_gain = target_level_ / peak_level_;
+            // Limit gain to reasonable range (0.1 to 1000.0)
+            desired_gain = std::max(0.1f, std::min(1000.0f, desired_gain));
+        }
+        
+        // Smooth the gain changes
+        current_gain_ = smoothing_factor_ * current_gain_ + (1.0f - smoothing_factor_) * desired_gain;
+        
+        // Apply gain
+        output[i] = input_sample * current_gain_;
+    }
+    
+    return output;
+}
+
+void NormalizerNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Normalizer %d", node_id_);
+    ImGui::PushItemWidth(120.0f);
+    
+    ImGui::SliderFloat("Target Level", &target_level_, 0.1f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Attack (ms)", &attack_time_, 0.001f, 0.1f, "%.3f");
+    ImGui::SliderFloat("Release (ms)", &release_time_, 0.01f, 1.0f, "%.3f");
+    
+    // Display current gain
+    ImGui::Text("Current Gain: %.2fx", current_gain_);
+    ImGui::Text("Peak Level: %.2f", peak_level_);
+    
+    ImGui::PopItemWidth();
+    
+    // Input pin
+    ed::BeginPin(input_pin_id_, ed::PinKind::Input);
+    ImGui::Text("<- Input");
+    ed::EndPin();
+    
+    ImGui::SameLine();
+    
+    // Output pin
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Output ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    ImGui::PopID();
+}
+
+// ============================================================================
 // BandpassFilterNode Implementation
 // ============================================================================
 
@@ -1782,6 +1894,19 @@ WhiteNoiseNode* AudioNodeGraph::CreateWhiteNoiseNode() {
     return node_ptr;
 }
 
+NormalizerNode* AudioNodeGraph::CreateNormalizerNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<NormalizerNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 1000 + 500, node_id);  // Input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created normalizer node: " << node_id;
+    return node_ptr;
+}
+
 PlayerNode* AudioNodeGraph::CreatePlayerNode() {
     // Only allow one player node
     if (player_node_) {
@@ -2033,6 +2158,9 @@ void AudioNodeGraph::Draw() {
         }
         if (ImGui::MenuItem("White Noise")) {
             CreateWhiteNoiseNode();
+        }
+        if (ImGui::MenuItem("Normalizer")) {
+            CreateNormalizerNode();
         }
         if (ImGui::MenuItem("Sum Node")) {
             CreateSumNode();
