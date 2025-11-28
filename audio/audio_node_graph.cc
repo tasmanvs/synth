@@ -26,10 +26,12 @@ SourceNode::SourceNode(int node_id)
     : AudioNode(node_id, NodeType::kSource)
     , frequency_(440.0f)
     , volume_(0.5f)
+    , waveform_type_(WaveformType::kSine)
     , last_frequency_(440.0f)
     , last_volume_(0.5f)
+    , last_waveform_type_(WaveformType::kSine)
     , parameters_changed_(false)
-    , phase_generator_(0.0f) {
+    , phase_(0.0) {
     buffer_config_.frequency_hz = frequency_;
     buffer_config_.amplitude = volume_;
     buffer_config_.sample_rate = 48000;
@@ -41,12 +43,73 @@ std::vector<float> SourceNode::GenerateAudio(int num_samples, int sample_rate) {
         return {};
     }
 
-    buffer_config_.frame_count = num_samples;
-    buffer_config_.sample_rate = sample_rate;
-    buffer_config_.frequency_hz = frequency_;
-    buffer_config_.amplitude = volume_;
+    switch (waveform_type_) {
+        case WaveformType::kSine:
+            return GenerateSine(num_samples, sample_rate);
+        case WaveformType::kSawtooth:
+            return GenerateSawtooth(num_samples, sample_rate);
+        case WaveformType::kSquare:
+            return GenerateSquare(num_samples, sample_rate);
+        default:
+            return GenerateSine(num_samples, sample_rate);
+    }
+}
 
-    return phase_generator_.GenerateBuffer(buffer_config_);
+std::vector<float> SourceNode::GenerateSine(int num_samples, int sample_rate) {
+    std::vector<float> output(num_samples);
+    const double pi = 3.14159265358979323846;
+    double phase_increment = 2.0 * pi * frequency_ / sample_rate;
+    
+    for (int i = 0; i < num_samples; ++i) {
+        output[i] = volume_ * std::sin(phase_);
+        phase_ += phase_increment;
+        
+        // Wrap phase to avoid precision issues
+        if (phase_ >= 2.0 * pi) {
+            phase_ -= 2.0 * pi;
+        }
+    }
+    
+    return output;
+}
+
+std::vector<float> SourceNode::GenerateSawtooth(int num_samples, int sample_rate) {
+    std::vector<float> output(num_samples);
+    const double pi = 3.14159265358979323846;
+    double phase_increment = 2.0 * pi * frequency_ / sample_rate;
+    
+    for (int i = 0; i < num_samples; ++i) {
+        // Sawtooth: ramps from -1 to 1 linearly
+        double normalized_phase = phase_ / (2.0 * pi);
+        output[i] = volume_ * (2.0f * normalized_phase - 1.0f);
+        phase_ += phase_increment;
+        
+        // Wrap phase
+        if (phase_ >= 2.0 * pi) {
+            phase_ -= 2.0 * pi;
+        }
+    }
+    
+    return output;
+}
+
+std::vector<float> SourceNode::GenerateSquare(int num_samples, int sample_rate) {
+    std::vector<float> output(num_samples);
+    const double pi = 3.14159265358979323846;
+    double phase_increment = 2.0 * pi * frequency_ / sample_rate;
+    
+    for (int i = 0; i < num_samples; ++i) {
+        // Square: +1 or -1 depending on which half of cycle
+        output[i] = volume_ * (phase_ < pi ? 1.0f : -1.0f);
+        phase_ += phase_increment;
+        
+        // Wrap phase
+        if (phase_ >= 2.0 * pi) {
+            phase_ -= 2.0 * pi;
+        }
+    }
+    
+    return output;
 }
 
 void SourceNode::Draw() {
@@ -57,7 +120,26 @@ void SourceNode::Draw() {
     
     ImGui::Text("Source Node %d", node_id_);
     ImGui::PushItemWidth(120.0f);
-    if (ImGui::SliderFloat("Frequency", &frequency_, 20.0f, 2000.0f, "%.1f Hz")) {
+    
+    // Waveform type selector
+    ImGui::Text("Waveform:");
+    int current_waveform = static_cast<int>(waveform_type_);
+    if (ImGui::RadioButton("Sine", &current_waveform, static_cast<int>(WaveformType::kSine))) {
+        waveform_type_ = WaveformType::kSine;
+        parameters_changed_ = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Sawtooth", &current_waveform, static_cast<int>(WaveformType::kSawtooth))) {
+        waveform_type_ = WaveformType::kSawtooth;
+        parameters_changed_ = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::RadioButton("Square", &current_waveform, static_cast<int>(WaveformType::kSquare))) {
+        waveform_type_ = WaveformType::kSquare;
+        parameters_changed_ = true;
+    }
+    
+    if (ImGui::SliderFloat("Frequency", &frequency_, 0.1f, 20000.0f, "%.1f Hz")) {
         parameters_changed_ = true;
     }
     if (ImGui::SliderFloat("Volume", &volume_, 0.0f, 1.0f, "%.2f")) {
@@ -75,9 +157,10 @@ void SourceNode::Draw() {
 }
 
 bool SourceNode::HasParametersChanged() {
-    if (frequency_ != last_frequency_ || volume_ != last_volume_) {
+    if (frequency_ != last_frequency_ || volume_ != last_volume_ || waveform_type_ != last_waveform_type_) {
         last_frequency_ = frequency_;
         last_volume_ = volume_;
+        last_waveform_type_ = waveform_type_;
         return true;
     }
     return parameters_changed_;

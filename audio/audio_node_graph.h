@@ -61,7 +61,14 @@ protected:
     NodeType type_;
 };
 
-// Source node: Generates a sine wave with configurable frequency and volume
+// Waveform types for source node
+enum class WaveformType {
+    kSine,
+    kSawtooth,
+    kSquare
+};
+
+// Source node: Generates waveforms (sine, sawtooth, square) with configurable frequency and volume
 class SourceNode : public AudioNode {
 public:
     SourceNode(int node_id);
@@ -79,11 +86,17 @@ public:
 private:
     float frequency_;
     float volume_;
+    WaveformType waveform_type_;
     float last_frequency_;
     float last_volume_;
+    WaveformType last_waveform_type_;
     bool parameters_changed_;
     audio_loop::BufferConfig buffer_config_;
-    audio_loop::PhaseContinuousSine phase_generator_;
+    double phase_; // Phase accumulator for all waveform types
+    
+    std::vector<float> GenerateSine(int num_samples, int sample_rate);
+    std::vector<float> GenerateSawtooth(int num_samples, int sample_rate);
+    std::vector<float> GenerateSquare(int num_samples, int sample_rate);
 };
 
 // Harmonic node: Generates a base frequency plus integer multiples (harmonics)
