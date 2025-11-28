@@ -1339,6 +1339,184 @@ void ScalerNode::Draw() {
 }
 
 // ============================================================================
+// ReverbNode Implementation
+// ============================================================================
+
+ReverbNode::ReverbNode(int node_id)
+    : AudioNode(node_id, NodeType::kReverb)
+    , input_pin_id_(node_id * 1000 + 500)
+    , input_(nullptr)
+    , room_size_(0.5f)
+    , damping_(0.5f)
+    , wet_level_(0.3f)
+    , dry_level_(0.7f)
+    , buffers_initialized_(false)
+    , last_sample_rate_(0) {
+    comb_buffers_.resize(kNumCombs_);
+    comb_indices_.resize(kNumCombs_, 0);
+    comb_feedback_.resize(kNumCombs_, 0.0f);
+    comb_damp_.resize(kNumCombs_, 0.0f);
+    
+    allpass_buffers_.resize(kNumAllpass_);
+    allpass_indices_.resize(kNumAllpass_, 0);
+}
+
+void ReverbNode::InitializeBuffers(int sample_rate) {
+    if (buffers_initialized_ && last_sample_rate_ == sample_rate) {
+        return;
+    }
+    
+    // Comb filter delays (in samples) - tuned for pleasant reverb
+    // Based on Freeverb parameters scaled to sample rate
+    const int comb_delays[kNumCombs_] = {
+        static_cast<int>(1557 * sample_rate / 44100.0f),
+        static_cast<int>(1617 * sample_rate / 44100.0f),
+        static_cast<int>(1491 * sample_rate / 44100.0f),
+        static_cast<int>(1422 * sample_rate / 44100.0f)
+    };
+    
+    // Allpass filter delays (in samples)
+    const int allpass_delays[kNumAllpass_] = {
+        static_cast<int>(225 * sample_rate / 44100.0f),
+        static_cast<int>(556 * sample_rate / 44100.0f)
+    };
+    
+    // Initialize comb filters
+    for (int i = 0; i < kNumCombs_; ++i) {
+        comb_buffers_[i].resize(comb_delays[i], 0.0f);
+        comb_indices_[i] = 0;
+        comb_feedback_[i] = 0.0f;
+        comb_damp_[i] = 0.0f;
+    }
+    
+    // Initialize allpass filters
+    for (int i = 0; i < kNumAllpass_; ++i) {
+        allpass_buffers_[i].resize(allpass_delays[i], 0.0f);
+        allpass_indices_[i] = 0;
+    }
+    
+    buffers_initialized_ = true;
+    last_sample_rate_ = sample_rate;
+}
+
+bool ReverbNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (input_ != nullptr) {
+        return false;
+    }
+    input_ = input_node;
+    return true;
+}
+
+void ReverbNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (input_ == input_node) {
+        input_ = nullptr;
+    }
+}
+
+std::vector<float> ReverbNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (!input_ || num_samples <= 0) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    InitializeBuffers(sample_rate);
+    
+    // Get input audio
+    std::vector<float> input_audio = input_->GenerateAudio(num_samples, sample_rate);
+    if (input_audio.empty()) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    std::vector<float> output(num_samples);
+    
+    // Calculate feedback based on room size
+    float feedback = 0.28f + room_size_ * 0.7f;
+    float damp_coeff = damping_;
+    float damp_inv = 1.0f - damp_coeff;
+    
+    for (int i = 0; i < num_samples; ++i) {
+        float input_sample = input_audio[i];
+        float comb_sum = 0.0f;
+        
+        // Process comb filters (parallel)
+        for (int c = 0; c < kNumCombs_; ++c) {
+            int buffer_size = comb_buffers_[c].size();
+            int& idx = comb_indices_[c];
+            
+            // Read from delay line
+            float delayed = comb_buffers_[c][idx];
+            
+            // One-pole lowpass filter for damping
+            comb_damp_[c] = delayed * damp_inv + comb_damp_[c] * damp_coeff;
+            
+            // Write to delay line with feedback
+            comb_buffers_[c][idx] = input_sample + comb_damp_[c] * feedback;
+            
+            // Accumulate output
+            comb_sum += delayed;
+            
+            // Advance index
+            idx = (idx + 1) % buffer_size;
+        }
+        
+        // Average the comb filter outputs
+        float reverb_sample = comb_sum / kNumCombs_;
+        
+        // Process allpass filters (series)
+        for (int a = 0; a < kNumAllpass_; ++a) {
+            int buffer_size = allpass_buffers_[a].size();
+            int& idx = allpass_indices_[a];
+            
+            float delayed = allpass_buffers_[a][idx];
+            float allpass_feedback = 0.5f;
+            
+            // Allpass filter equation
+            float allpass_out = -reverb_sample + delayed;
+            allpass_buffers_[a][idx] = reverb_sample + delayed * allpass_feedback;
+            reverb_sample = allpass_out;
+            
+            idx = (idx + 1) % buffer_size;
+        }
+        
+        // Mix dry and wet signals
+        output[i] = input_sample * dry_level_ + reverb_sample * wet_level_;
+    }
+    
+    return output;
+}
+
+void ReverbNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Reverb %d", node_id_);
+    ImGui::PushItemWidth(140.0f);
+    
+    ImGui::SliderFloat("Room Size", &room_size_, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Damping", &damping_, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Wet", &wet_level_, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("Dry", &dry_level_, 0.0f, 1.0f, "%.2f");
+    
+    ImGui::PopItemWidth();
+    
+    // Input pin
+    ed::BeginPin(input_pin_id_, ed::PinKind::Input);
+    ImGui::Text("<- Input");
+    ed::EndPin();
+    
+    ImGui::SameLine();
+    
+    // Output pin
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Output ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    ImGui::PopID();
+}
+
+// ============================================================================
 // BandpassFilterNode Implementation
 // ============================================================================
 
@@ -2316,6 +2494,19 @@ ScalerNode* AudioNodeGraph::CreateScalerNode() {
     return node_ptr;
 }
 
+ReverbNode* AudioNodeGraph::CreateReverbNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<ReverbNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 1000 + 500, node_id);  // Input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created reverb node: " << node_id;
+    return node_ptr;
+}
+
 PlayerNode* AudioNodeGraph::CreatePlayerNode() {
     // Only allow one player node
     if (player_node_) {
@@ -2576,6 +2767,9 @@ void AudioNodeGraph::Draw() {
         }
         if (ImGui::MenuItem("Scaler")) {
             CreateScalerNode();
+        }
+        if (ImGui::MenuItem("Reverb")) {
+            CreateReverbNode();
         }
         if (ImGui::MenuItem("Sum Node")) {
             CreateSumNode();

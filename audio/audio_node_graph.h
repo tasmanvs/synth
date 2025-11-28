@@ -23,6 +23,7 @@ class WhiteNoiseNode;
 class NormalizerNode;
 class AmplitudeModulatorNode;
 class ScalerNode;
+class ReverbNode;
 class AudioNodeGraph;
 
 // Audio node types
@@ -37,7 +38,8 @@ enum class NodeType {
     kWhiteNoise,
     kNormalizer,
     kAmplitudeModulator,
-    kScaler
+    kScaler,
+    kReverb
 };
 
 // Base class for all audio nodes
@@ -306,6 +308,42 @@ private:
     float detected_max_;      // Running maximum for auto-detection
 };
 
+// Reverb node: Adds reverb effect using Schroeder algorithm
+class ReverbNode : public AudioNode {
+public:
+    ReverbNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
+private:
+    int input_pin_id_;
+    AudioNode* input_;
+    float room_size_;         // Room size parameter (0-1)
+    float damping_;           // High frequency damping (0-1)
+    float wet_level_;         // Wet signal level (0-1)
+    float dry_level_;         // Dry signal level (0-1)
+    
+    // Comb filters (parallel)
+    static constexpr int kNumCombs_ = 4;
+    std::vector<std::vector<float>> comb_buffers_;
+    std::vector<int> comb_indices_;
+    std::vector<float> comb_feedback_;
+    std::vector<float> comb_damp_;
+    
+    // Allpass filters (series)
+    static constexpr int kNumAllpass_ = 2;
+    std::vector<std::vector<float>> allpass_buffers_;
+    std::vector<int> allpass_indices_;
+    
+    void InitializeBuffers(int sample_rate);
+    bool buffers_initialized_;
+    int last_sample_rate_;
+};
+
 // Sum node: Adds the output of one or more input nodes
 class SumNode : public AudioNode {
 public:
@@ -412,6 +450,7 @@ public:
     NormalizerNode* CreateNormalizerNode();
     AmplitudeModulatorNode* CreateAmplitudeModulatorNode();
     ScalerNode* CreateScalerNode();
+    ReverbNode* CreateReverbNode();
     
     // Node management
     void DeleteNode(int node_id);
