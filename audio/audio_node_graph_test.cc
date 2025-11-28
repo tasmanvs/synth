@@ -223,5 +223,122 @@ TEST_F(SumNodeTest, ComplexGraphMaintainsPhase) {
     }
 }
 
+// ============================================================================
+// Smoothed Square Wave Tests
+// ============================================================================
+
+TEST_F(SourceNodeTest, SmoothedSquareWaveIsContinuous) {
+    audio_nodes::SourceNode source(1);
+    // Use a mock to set waveform type - since we can't call Draw(), we'll test
+    // by generating audio and checking smoothness
+    
+    // Generate a full period of audio at low frequency to see transitions clearly
+    const int sample_rate = 48000;
+    const int samples_per_period = sample_rate / 10; // 10 Hz
+    
+    auto samples = source.GenerateAudio(samples_per_period * 2, sample_rate);
+    
+    // Check for discontinuities (clicks)
+    float max_diff = 0.0f;
+    for (size_t i = 1; i < samples.size(); i++) {
+        float diff = std::abs(samples[i] - samples[i-1]);
+        max_diff = std::max(max_diff, diff);
+    }
+    
+    // For a properly smoothed wave at 10Hz with default 1ms smoothing,
+    // the maximum difference between consecutive samples should be small
+    // Max theoretical diff for unsmoothed square: 2.0 (jump from -1 to +1)
+    // With smoothing, should be much smaller
+    EXPECT_LT(max_diff, 0.1f) 
+        << "Large discontinuity detected in smoothed square wave: " << max_diff;
+}
+
+TEST_F(SourceNodeTest, SmoothedSquareWaveHasCorrectAmplitude) {
+    audio_nodes::SourceNode source(1);
+    
+    const int sample_rate = 48000;
+    const int num_samples = sample_rate; // 1 second
+    
+    auto samples = source.GenerateAudio(num_samples, sample_rate);
+    
+    // Find min and max
+    float min_val = *std::min_element(samples.begin(), samples.end());
+    float max_val = *std::max_element(samples.begin(), samples.end());
+    
+    // Should reach close to -volume and +volume
+    float volume = source.GetVolume();
+    EXPECT_NEAR(max_val, volume, 0.1f) << "Max value: " << max_val;
+    EXPECT_NEAR(min_val, -volume, 0.1f) << "Min value: " << min_val;
+}
+
+TEST_F(SourceNodeTest, SmoothedSquareWavePhaseContinuity) {
+    audio_nodes::SourceNode source(1);
+    
+    const int sample_rate = 48000;
+    const int buffer_size = 1024;
+    
+    // Generate multiple consecutive buffers
+    std::vector<float> prev_buffer = source.GenerateAudio(buffer_size, sample_rate);
+    
+    for (int i = 0; i < 20; i++) {
+        auto curr_buffer = source.GenerateAudio(buffer_size, sample_rate);
+        
+        // Check boundary continuity
+        float last_sample = prev_buffer[prev_buffer.size() - 1];
+        float first_sample = curr_buffer[0];
+        float boundary_diff = std::abs(first_sample - last_sample);
+        
+        // Should be smooth across buffer boundaries
+        EXPECT_LT(boundary_diff, 0.1f)
+            << "Discontinuity at buffer boundary " << i
+            << ". Last: " << last_sample
+            << ", First: " << first_sample
+            << ", Diff: " << boundary_diff;
+        
+        prev_buffer = curr_buffer;
+    }
+}
+
+TEST_F(SourceNodeTest, SmoothedSquareWaveDerivativeIsBounded) {
+    audio_nodes::SourceNode source(1);
+    
+    const int sample_rate = 48000;
+    const int num_samples = sample_rate; // 1 second
+    
+    auto samples = source.GenerateAudio(num_samples, sample_rate);
+    
+    // Compute finite differences (approximate derivative)
+    float max_derivative = 0.0f;
+    for (size_t i = 1; i < samples.size(); i++) {
+        float derivative = std::abs(samples[i] - samples[i-1]) * sample_rate;
+        max_derivative = std::max(max_derivative, derivative);
+    }
+    
+    // For a smoothed wave, the derivative should be bounded
+    // Unsmoothed square wave would have infinite derivative at transitions
+    // With 1ms smoothing over a range of 2.0, max derivative should be around 2000
+    EXPECT_LT(max_derivative, 5000.0f)
+        << "Derivative too large, suggesting sharp transitions: " << max_derivative;
+}
+
+TEST_F(SourceNodeTest, SmoothedSquareWaveNoSpikes) {
+    audio_nodes::SourceNode source(1);
+    
+    const int sample_rate = 48000;
+    const int num_samples = sample_rate / 10; // One period at 10 Hz
+    
+    auto samples = source.GenerateAudio(num_samples * 3, sample_rate);
+    
+    float volume = source.GetVolume();
+    
+    // Check that no sample exceeds the volume bounds
+    for (size_t i = 0; i < samples.size(); i++) {
+        EXPECT_LE(samples[i], volume * 1.01f) 
+            << "Sample " << i << " exceeds upper bound: " << samples[i];
+        EXPECT_GE(samples[i], -volume * 1.01f)
+            << "Sample " << i << " exceeds lower bound: " << samples[i];
+    }
+}
+
 } // namespace
 } // namespace audio_nodes

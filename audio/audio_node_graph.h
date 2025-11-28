@@ -21,6 +21,8 @@ class LowpassFilterNode;
 class HighpassFilterNode;
 class WhiteNoiseNode;
 class NormalizerNode;
+class AmplitudeModulatorNode;
+class ScalerNode;
 class AudioNodeGraph;
 
 // Audio node types
@@ -33,7 +35,9 @@ enum class NodeType {
     kLowpassFilter,
     kHighpassFilter,
     kWhiteNoise,
-    kNormalizer
+    kNormalizer,
+    kAmplitudeModulator,
+    kScaler
 };
 
 // Base class for all audio nodes
@@ -67,7 +71,9 @@ protected:
 enum class WaveformType {
     kSine,
     kSawtooth,
-    kSquare
+    kSquare,
+    kSmoothedSquare,
+    kStringResonator
 };
 
 // Source node: Generates waveforms (sine, sawtooth, square) with configurable frequency and volume
@@ -95,10 +101,14 @@ private:
     bool parameters_changed_;
     audio_loop::BufferConfig buffer_config_;
     double phase_; // Phase accumulator for all waveform types
+    int num_harmonics_; // Number of harmonics for string resonator
+    float smoothing_time_; // Smoothing time in milliseconds for smoothed square wave
     
     std::vector<float> GenerateSine(int num_samples, int sample_rate);
     std::vector<float> GenerateSawtooth(int num_samples, int sample_rate);
     std::vector<float> GenerateSquare(int num_samples, int sample_rate);
+    std::vector<float> GenerateSmoothedSquare(int num_samples, int sample_rate);
+    std::vector<float> GenerateStringResonator(int num_samples, int sample_rate);
 };
 
 // Harmonic node: Generates a base frequency plus integer multiples (harmonics)
@@ -253,6 +263,49 @@ private:
     float smoothing_factor_;   // For exponential moving average
 };
 
+// Amplitude Modulator node: Modulates the amplitude of carrier signal by modulator signal
+class AmplitudeModulatorNode : public AudioNode {
+public:
+    AmplitudeModulatorNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
+private:
+    int carrier_pin_id_;      // Pin for carrier signal input
+    int modulator_pin_id_;    // Pin for modulator signal input
+    AudioNode* carrier_input_;
+    AudioNode* modulator_input_;
+    float modulation_depth_;  // 0.0 to 1.0 - how much modulation is applied
+    float dc_offset_;         // DC offset for modulator (0.5 = unipolar, 0.0 = bipolar)
+};
+
+// Scaler node: Remaps input signal from input range to output range
+class ScalerNode : public AudioNode {
+public:
+    ScalerNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
+private:
+    int input_pin_id_;
+    AudioNode* input_;
+    float input_min_;         // Expected input minimum
+    float input_max_;         // Expected input maximum
+    float output_min_;        // Desired output minimum
+    float output_max_;        // Desired output maximum
+    bool auto_detect_range_;  // Automatically detect input range
+    float detected_min_;      // Running minimum for auto-detection
+    float detected_max_;      // Running maximum for auto-detection
+};
+
 // Sum node: Adds the output of one or more input nodes
 class SumNode : public AudioNode {
 public:
@@ -357,6 +410,8 @@ public:
     HighpassFilterNode* CreateHighpassFilterNode();
     WhiteNoiseNode* CreateWhiteNoiseNode();
     NormalizerNode* CreateNormalizerNode();
+    AmplitudeModulatorNode* CreateAmplitudeModulatorNode();
+    ScalerNode* CreateScalerNode();
     
     // Node management
     void DeleteNode(int node_id);

@@ -6,7 +6,6 @@ cc_library(
         "@abseil-cpp//absl/log",
     ],
     visibility = ["//visibility:public"],
-    target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
 cc_library(
@@ -24,7 +23,25 @@ cc_library(
     ],
     copts = ["-fexceptions"],
     visibility = ["//visibility:public"],
-    target_compatible_with = ["@platforms//cpu:wasm32"],
+)
+
+cc_test(
+    name = "audio_node_graph_test",
+    srcs = ["audio_node_graph_test.cc"],
+    deps = [
+        ":audio_node_graph",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "smoothed_square_test",
+    srcs = ["smoothed_square_test.cc"],
+    deps = [
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+    ],
 )
 
 exports_files([

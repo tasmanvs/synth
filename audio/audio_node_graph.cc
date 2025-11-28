@@ -31,7 +31,9 @@ SourceNode::SourceNode(int node_id)
     , last_volume_(0.5f)
     , last_waveform_type_(WaveformType::kSine)
     , parameters_changed_(false)
-    , phase_(0.0) {
+    , phase_(0.0)
+    , num_harmonics_(8)
+    , smoothing_time_(1.0f) {
     buffer_config_.frequency_hz = frequency_;
     buffer_config_.amplitude = volume_;
     buffer_config_.sample_rate = 48000;
@@ -50,6 +52,10 @@ std::vector<float> SourceNode::GenerateAudio(int num_samples, int sample_rate) {
             return GenerateSawtooth(num_samples, sample_rate);
         case WaveformType::kSquare:
             return GenerateSquare(num_samples, sample_rate);
+        case WaveformType::kSmoothedSquare:
+            return GenerateSmoothedSquare(num_samples, sample_rate);
+        case WaveformType::kStringResonator:
+            return GenerateStringResonator(num_samples, sample_rate);
         default:
             return GenerateSine(num_samples, sample_rate);
     }
@@ -112,6 +118,111 @@ std::vector<float> SourceNode::GenerateSquare(int num_samples, int sample_rate) 
     return output;
 }
 
+std::vector<float> SourceNode::GenerateSmoothedSquare(int num_samples, int sample_rate) {
+    std::vector<float> output(num_samples);
+    const double pi = 3.14159265358979323846;
+    double phase_increment = 2.0 * pi * frequency_ / sample_rate;
+    
+    // Calculate smoothing duration in radians  
+    float smoothing_samples = (smoothing_time_ / 1000.0f) * sample_rate;
+    smoothing_samples = std::max(2.0f, smoothing_samples);
+    double smoothing_phase = smoothing_samples * phase_increment;
+    smoothing_phase = std::min(smoothing_phase, pi * 0.48); // Max 48% of half-period
+    
+    for (int i = 0; i < num_samples; ++i) {
+        // Normalize phase to [0, 2*pi)
+        double norm_phase = std::fmod(phase_, 2.0 * pi);
+        if (norm_phase < 0) norm_phase += 2.0 * pi;
+        
+        float value;
+        
+        // The rising edge wraps around 0/2π, so we need to handle it specially
+        // Check distance from phase=0 (accounting for wrap)
+        double dist_from_zero = (norm_phase < pi) ? norm_phase : (2.0 * pi - norm_phase);
+        
+        if (dist_from_zero < smoothing_phase) {
+            // Rising edge centered at phase=0 (wraps around 2π): -1 to +1
+            // Map phase to transition parameter t ∈ [0, 1]
+            double t;
+            if (norm_phase <= smoothing_phase) {
+                // First part: [0, smoothing_phase]
+                t = 0.5 + norm_phase / (2.0 * smoothing_phase);
+            } else {
+                // Wrapped part: [2π - smoothing_phase, 2π]
+                t = (norm_phase - (2.0 * pi - smoothing_phase)) / (2.0 * smoothing_phase);
+            }
+            t = std::max(0.0, std::min(1.0, t));
+            float smooth_t = t * t * (3.0 - 2.0 * t);
+            value = -1.0f + 2.0f * smooth_t;
+        } else if (norm_phase < pi - smoothing_phase) {
+            // High plateau
+            value = 1.0f;
+        } else if (norm_phase < pi + smoothing_phase) {
+            // Falling edge centered at phase=π: +1 to -1
+            double t = (norm_phase - (pi - smoothing_phase)) / (2.0 * smoothing_phase);
+            t = std::max(0.0, std::min(1.0, t));
+            float smooth_t = t * t * (3.0 - 2.0 * t);
+            value = 1.0f - 2.0f * smooth_t;
+        } else {
+            // Low plateau
+            value = -1.0f;
+        }
+        
+        output[i] = volume_ * value;
+        phase_ += phase_increment;
+        
+        // Wrap phase
+        while (phase_ >= 2.0 * pi) {
+            phase_ -= 2.0 * pi;
+        }
+        while (phase_ < 0.0) {
+            phase_ += 2.0 * pi;
+        }
+    }
+    
+    return output;
+}
+
+std::vector<float> SourceNode::GenerateStringResonator(int num_samples, int sample_rate) {
+    std::vector<float> output(num_samples, 0.0f);
+    const double pi = 3.14159265358979323846;
+    
+    // Generate harmonics at f, f/2, f/3, f/4, etc.
+    for (int harmonic = 1; harmonic <= num_harmonics_; ++harmonic) {
+        double harmonic_freq = frequency_ / static_cast<double>(harmonic);
+        double phase_increment = 2.0 * pi * harmonic_freq / sample_rate;
+        double harmonic_phase = phase_;
+        
+        // Amplitude decreases with higher harmonics (1/n falloff)
+        float harmonic_amplitude = volume_ / static_cast<float>(harmonic);
+        
+        for (int i = 0; i < num_samples; ++i) {
+            output[i] += harmonic_amplitude * std::sin(harmonic_phase);
+            harmonic_phase += phase_increment;
+            
+            // Wrap phase
+            if (harmonic_phase >= 2.0 * pi) {
+                harmonic_phase -= 2.0 * pi;
+            }
+        }
+    }
+    
+    // Update main phase for next call
+    double phase_increment = 2.0 * pi * frequency_ / sample_rate;
+    phase_ += phase_increment * num_samples;
+    while (phase_ >= 2.0 * pi) {
+        phase_ -= 2.0 * pi;
+    }
+    
+    // Normalize output to prevent clipping
+    float normalization = 1.0f / std::sqrt(static_cast<float>(num_harmonics_));
+    for (int i = 0; i < num_samples; ++i) {
+        output[i] *= normalization;
+    }
+    
+    return output;
+}
+
 void SourceNode::Draw() {
     namespace ed = ax::NodeEditor;
     ImGui::PushID(node_id_);
@@ -138,6 +249,14 @@ void SourceNode::Draw() {
         waveform_type_ = WaveformType::kSquare;
         parameters_changed_ = true;
     }
+    if (ImGui::RadioButton("Smooth Sq", &current_waveform, static_cast<int>(WaveformType::kSmoothedSquare))) {
+        waveform_type_ = WaveformType::kSmoothedSquare;
+        parameters_changed_ = true;
+    }
+    if (ImGui::RadioButton("String", &current_waveform, static_cast<int>(WaveformType::kStringResonator))) {
+        waveform_type_ = WaveformType::kStringResonator;
+        parameters_changed_ = true;
+    }
     
     if (ImGui::SliderFloat("Frequency", &frequency_, 0.1f, 20000.0f, "%.1f Hz")) {
         parameters_changed_ = true;
@@ -145,6 +264,21 @@ void SourceNode::Draw() {
     if (ImGui::SliderFloat("Volume", &volume_, 0.0f, 1.0f, "%.2f")) {
         parameters_changed_ = true;
     }
+    
+    // Show harmonics slider only for string resonator
+    if (waveform_type_ == WaveformType::kStringResonator) {
+        if (ImGui::SliderInt("Harmonics", &num_harmonics_, 1, 16)) {
+            parameters_changed_ = true;
+        }
+    }
+    
+    // Show smoothing time slider only for smoothed square
+    if (waveform_type_ == WaveformType::kSmoothedSquare) {
+        if (ImGui::SliderFloat("Smoothing (ms)", &smoothing_time_, 0.1f, 10.0f, "%.1f")) {
+            parameters_changed_ = true;
+        }
+    }
+    
     ImGui::PopItemWidth();
     
     // Output pin
@@ -937,6 +1071,254 @@ void NormalizerNode::Draw() {
     // Display current gain
     ImGui::Text("Current Gain: %.2fx", current_gain_);
     ImGui::Text("Peak Level: %.2f", peak_level_);
+    
+    ImGui::PopItemWidth();
+    
+    // Input pin
+    ed::BeginPin(input_pin_id_, ed::PinKind::Input);
+    ImGui::Text("<- Input");
+    ed::EndPin();
+    
+    ImGui::SameLine();
+    
+    // Output pin
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Output ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    ImGui::PopID();
+}
+
+// ============================================================================
+// AmplitudeModulatorNode Implementation
+// ============================================================================
+
+AmplitudeModulatorNode::AmplitudeModulatorNode(int node_id)
+    : AudioNode(node_id, NodeType::kAmplitudeModulator)
+    , carrier_pin_id_(node_id * 1000 + 500)
+    , modulator_pin_id_(node_id * 1000 + 501)
+    , carrier_input_(nullptr)
+    , modulator_input_(nullptr)
+    , modulation_depth_(1.0f)
+    , dc_offset_(0.5f) {
+}
+
+bool AmplitudeModulatorNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (pin_id == carrier_pin_id_ && carrier_input_ == nullptr) {
+        carrier_input_ = input_node;
+        return true;
+    } else if (pin_id == modulator_pin_id_ && modulator_input_ == nullptr) {
+        modulator_input_ = input_node;
+        return true;
+    }
+    return false;
+}
+
+void AmplitudeModulatorNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (carrier_input_ == input_node && pin_id == carrier_pin_id_) {
+        carrier_input_ = nullptr;
+    } else if (modulator_input_ == input_node && pin_id == modulator_pin_id_) {
+        modulator_input_ = nullptr;
+    }
+}
+
+std::vector<float> AmplitudeModulatorNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (!carrier_input_ || num_samples <= 0) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    // Get carrier signal
+    std::vector<float> carrier = carrier_input_->GenerateAudio(num_samples, sample_rate);
+    if (carrier.empty()) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    // If no modulator, just pass through carrier
+    if (!modulator_input_) {
+        return carrier;
+    }
+    
+    // Get modulator signal
+    std::vector<float> modulator = modulator_input_->GenerateAudio(num_samples, sample_rate);
+    if (modulator.empty()) {
+        return carrier;
+    }
+    
+    std::vector<float> output(num_samples);
+    
+    // Apply amplitude modulation: output = carrier * (dc_offset + modulation_depth * modulator)
+    for (int i = 0; i < num_samples; ++i) {
+        float mod_signal = modulator[i] * modulation_depth_ + dc_offset_;
+        // Clamp modulation signal to prevent extreme values
+        mod_signal = std::max(0.0f, std::min(2.0f, mod_signal));
+        output[i] = carrier[i] * mod_signal;
+    }
+    
+    return output;
+}
+
+void AmplitudeModulatorNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Amplitude Modulator %d", node_id_);
+    ImGui::PushItemWidth(140.0f);
+    
+    ImGui::SliderFloat("Mod Depth", &modulation_depth_, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("DC Offset", &dc_offset_, 0.0f, 1.0f, "%.2f");
+    
+    ImGui::PopItemWidth();
+    
+    // Carrier input pin
+    ed::BeginPin(carrier_pin_id_, ed::PinKind::Input);
+    ImGui::Text("<- Carrier");
+    ed::EndPin();
+    
+    // Modulator input pin
+    ed::BeginPin(modulator_pin_id_, ed::PinKind::Input);
+    ImGui::Text("<- Modulator");
+    ed::EndPin();
+    
+    ImGui::SameLine();
+    
+    // Output pin
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Output ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    ImGui::PopID();
+}
+
+// ============================================================================
+// ScalerNode Implementation
+// ============================================================================
+
+ScalerNode::ScalerNode(int node_id)
+    : AudioNode(node_id, NodeType::kScaler)
+    , input_pin_id_(node_id * 1000 + 500)
+    , input_(nullptr)
+    , input_min_(-1.0f)
+    , input_max_(1.0f)
+    , output_min_(0.0f)
+    , output_max_(1.0f)
+    , auto_detect_range_(false)
+    , detected_min_(0.0f)
+    , detected_max_(0.0f) {
+}
+
+bool ScalerNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (input_ != nullptr) {
+        return false;  // Already have an input
+    }
+    input_ = input_node;
+    return true;
+}
+
+void ScalerNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (input_ == input_node) {
+        input_ = nullptr;
+        // Reset detection when input is removed
+        detected_min_ = 0.0f;
+        detected_max_ = 0.0f;
+    }
+}
+
+std::vector<float> ScalerNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (!input_ || num_samples <= 0) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    // Get input audio
+    std::vector<float> input_audio = input_->GenerateAudio(num_samples, sample_rate);
+    if (input_audio.empty()) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    std::vector<float> output(num_samples);
+    
+    float actual_input_min = input_min_;
+    float actual_input_max = input_max_;
+    
+    // Auto-detect input range if enabled
+    if (auto_detect_range_) {
+        // Initialize on first sample
+        if (detected_min_ == 0.0f && detected_max_ == 0.0f) {
+            detected_min_ = input_audio[0];
+            detected_max_ = input_audio[0];
+        }
+        
+        // Update detected range with decay towards current values
+        for (int i = 0; i < num_samples; ++i) {
+            float sample = input_audio[i];
+            if (sample < detected_min_) {
+                detected_min_ = sample;
+            } else {
+                detected_min_ = detected_min_ * 0.9999f + sample * 0.0001f;
+            }
+            
+            if (sample > detected_max_) {
+                detected_max_ = sample;
+            } else {
+                detected_max_ = detected_max_ * 0.9999f + sample * 0.0001f;
+            }
+        }
+        
+        actual_input_min = detected_min_;
+        actual_input_max = detected_max_;
+    }
+    
+    // Compute scaling parameters
+    float input_range = actual_input_max - actual_input_min;
+    float output_range = output_max_ - output_min_;
+    
+    // Avoid division by zero
+    if (std::abs(input_range) < 0.0001f) {
+        input_range = 1.0f;
+    }
+    
+    // Apply linear remapping: output = output_min + (input - input_min) * (output_range / input_range)
+    for (int i = 0; i < num_samples; ++i) {
+        float normalized = (input_audio[i] - actual_input_min) / input_range;
+        output[i] = output_min_ + normalized * output_range;
+    }
+    
+    return output;
+}
+
+void ScalerNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Scaler %d", node_id_);
+    ImGui::PushItemWidth(140.0f);
+    
+    ImGui::Text("Output Range:");
+    ImGui::DragFloat("Min##out", &output_min_, 0.01f, -10.0f, 10.0f, "%.2f");
+    ImGui::DragFloat("Max##out", &output_max_, 0.01f, -10.0f, 10.0f, "%.2f");
+    
+    ImGui::Separator();
+    
+    if (ImGui::Checkbox("Auto-Detect Input", &auto_detect_range_)) {
+        if (auto_detect_range_) {
+            // Reset detection when enabling
+            detected_min_ = 0.0f;
+            detected_max_ = 0.0f;
+        }
+    }
+    
+    if (!auto_detect_range_) {
+        ImGui::Text("Input Range:");
+        ImGui::DragFloat("Min##in", &input_min_, 0.01f, -10.0f, 10.0f, "%.2f");
+        ImGui::DragFloat("Max##in", &input_max_, 0.01f, -10.0f, 10.0f, "%.2f");
+    } else {
+        ImGui::Text("Detected: [%.2f, %.2f]", detected_min_, detected_max_);
+    }
     
     ImGui::PopItemWidth();
     
@@ -1907,6 +2289,33 @@ NormalizerNode* AudioNodeGraph::CreateNormalizerNode() {
     return node_ptr;
 }
 
+AmplitudeModulatorNode* AudioNodeGraph::CreateAmplitudeModulatorNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<AmplitudeModulatorNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 1000 + 500, node_id);  // Carrier input pin
+    RegisterPin(node_id * 1000 + 501, node_id);  // Modulator input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created amplitude modulator node: " << node_id;
+    return node_ptr;
+}
+
+ScalerNode* AudioNodeGraph::CreateScalerNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<ScalerNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 1000 + 500, node_id);  // Input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created scaler node: " << node_id;
+    return node_ptr;
+}
+
 PlayerNode* AudioNodeGraph::CreatePlayerNode() {
     // Only allow one player node
     if (player_node_) {
@@ -2161,6 +2570,12 @@ void AudioNodeGraph::Draw() {
         }
         if (ImGui::MenuItem("Normalizer")) {
             CreateNormalizerNode();
+        }
+        if (ImGui::MenuItem("Amplitude Modulator")) {
+            CreateAmplitudeModulatorNode();
+        }
+        if (ImGui::MenuItem("Scaler")) {
+            CreateScalerNode();
         }
         if (ImGui::MenuItem("Sum Node")) {
             CreateSumNode();
