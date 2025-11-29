@@ -14,18 +14,6 @@
 namespace audio_nodes {
 namespace {
 
-// Helper function to detect clicks in audio signal
-// A click is detected when there's a sudden jump in amplitude between samples
-bool DetectClick(const std::vector<float>& samples, float threshold = 0.5f) {
-    for (size_t i = 1; i < samples.size(); i++) {
-        float diff = std::abs(samples[i] - samples[i-1]);
-        if (diff > threshold) {
-            return true;
-        }
-    }
-    return false;
-}
-
 // Helper function to compute RMS (Root Mean Square) of a signal
 float ComputeRMS(const std::vector<float>& samples) {
     float sum = 0.0f;
@@ -143,6 +131,7 @@ TEST_F(SourceNodeTest, DetectsClickWithoutPhaseTracking) {
     
     // Check for click at boundary
     float boundary_diff = std::abs(buffer2[0] - buffer1[num_samples - 1]);
+    (void)boundary_diff;
     
     // This demonstrates the problem - there's likely a discontinuity
     // Note: This test is informational and may occasionally pass if phases align
@@ -155,7 +144,7 @@ TEST_F(SourceNodeTest, DetectsClickWithoutPhaseTracking) {
 TEST_F(SumNodeTest, SumNodeAddsSignalsCorrectly) {
     audio_nodes::SourceNode source1(1);
     audio_nodes::SourceNode source2(2);
-    audio_nodes::SumNode sum(3);
+    audio_nodes::SumNode sum(3, nullptr);
     
     // Connect sources to sum node
     EXPECT_TRUE(sum.AddInput(&source1));
@@ -175,7 +164,7 @@ TEST_F(SumNodeTest, SumNodeAddsSignalsCorrectly) {
 TEST_F(SumNodeTest, SumNodeMaintainsPhaseContinuityOfInputs) {
     audio_nodes::SourceNode source1(1);
     audio_nodes::SourceNode source2(2);
-    audio_nodes::SumNode sum(3);
+    audio_nodes::SumNode sum(3, nullptr);
     
     // Connect sources to sum node
     sum.AddInput(&source1);
@@ -199,7 +188,7 @@ TEST_F(SumNodeTest, ComplexGraphMaintainsPhase) {
     // Create a more complex graph: two sources -> sum
     audio_nodes::SourceNode source1(1);
     audio_nodes::SourceNode source2(2);
-    audio_nodes::SumNode sum(3);
+    audio_nodes::SumNode sum(3, nullptr);
     
     // Connect the graph
     sum.AddInput(&source1);
