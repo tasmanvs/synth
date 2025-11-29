@@ -1629,6 +1629,136 @@ void ReverbNode::Draw() {
 }
 
 // ============================================================================
+// PitchShifterNode Implementation
+// ============================================================================
+
+PitchShifterNode::PitchShifterNode(int node_id)
+    : AudioNode(node_id, NodeType::kPitchShifter)
+    , input_pin_id_(node_id * 1000 + 500)
+    , input_(nullptr)
+    , semitones_(0.0f)
+    , write_index_(0)
+    , phasor_(0.0) {
+    delay_buffer_.resize(kBufferSize, 0.0f);
+}
+
+bool PitchShifterNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (input_ != nullptr) {
+        return false;
+    }
+    input_ = input_node;
+    return true;
+}
+
+void PitchShifterNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (input_ == input_node) {
+        input_ = nullptr;
+    }
+}
+
+float PitchShifterNode::ReadBuffer(double index) {
+    // Handle wrapping
+    while (index < 0.0) index += kBufferSize;
+    while (index >= kBufferSize) index -= kBufferSize;
+    
+    int idx0 = static_cast<int>(index);
+    int idx1 = (idx0 + 1) % kBufferSize;
+    float frac = index - idx0;
+    
+    return delay_buffer_[idx0] * (1.0f - frac) + delay_buffer_[idx1] * frac;
+}
+
+std::vector<float> PitchShifterNode::GenerateAudio(int num_samples, int sample_rate) {
+    if (!input_ || num_samples <= 0) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    // Get input audio
+    std::vector<float> input_audio = input_->GenerateAudio(num_samples, sample_rate);
+    if (input_audio.empty()) {
+        return std::vector<float>(num_samples, 0.0f);
+    }
+    
+    std::vector<float> output(num_samples);
+    
+    float pitch_ratio = std::pow(2.0f, semitones_ / 12.0f);
+    int window_samples = static_cast<int>(kWindowSize * sample_rate);
+    
+    // Rate at which the delay time changes
+    double phasor_inc = (1.0 - pitch_ratio) / window_samples;
+    
+    for (int i = 0; i < num_samples; ++i) {
+        float input_sample = input_audio[i];
+        
+        // Write to buffer
+        delay_buffer_[write_index_] = input_sample;
+        
+        // Calculate read positions based on phasor
+        // Delay varies from 0 to window_samples
+        double delay_a = phasor_ * window_samples;
+        double delay_b = std::fmod(phasor_ + 0.5, 1.0) * window_samples;
+        
+        // Read from buffer
+        float sample_a = ReadBuffer(write_index_ - delay_a);
+        float sample_b = ReadBuffer(write_index_ - delay_b);
+        
+        // Triangle windowing
+        float gain_a = (phasor_ < 0.5) ? (phasor_ * 2.0f) : ((1.0f - phasor_) * 2.0f);
+        float gain_b = (std::fmod(phasor_ + 0.5, 1.0) < 0.5) ? 
+                       (std::fmod(phasor_ + 0.5, 1.0) * 2.0f) : 
+                       ((1.0f - std::fmod(phasor_ + 0.5, 1.0)) * 2.0f);
+        
+        // Smooth windowing (Hanning-like)
+        // float gain_a = 0.5f * (1.0f - std::cos(2.0f * 3.14159f * phasor_));
+        // float gain_b = 0.5f * (1.0f - std::cos(2.0f * 3.14159f * std::fmod(phasor_ + 0.5, 1.0)));
+        
+        output[i] = sample_a * gain_a + sample_b * gain_b;
+        
+        // Increment write index
+        write_index_ = (write_index_ + 1) % kBufferSize;
+        
+        // Increment phasor
+        phasor_ += phasor_inc;
+        if (phasor_ >= 1.0) phasor_ -= 1.0;
+        if (phasor_ < 0.0) phasor_ += 1.0;
+    }
+    
+    return output;
+}
+
+void PitchShifterNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Pitch Shifter %d", node_id_);
+    ImGui::PushItemWidth(140.0f);
+    
+    // ImGui::SliderFloat("Semitones", &semitones_, -12.0f, 12.0f, "%.1f");
+
+    // Instead, step by 1 unit
+    ImGui::SliderFloat("Semitones", &semitones_, -12.0f, 12.0f, "%1.f");
+
+    ImGui::PopItemWidth();
+    
+    // Input pin
+    ed::BeginPin(input_pin_id_, ed::PinKind::Input);
+    ImGui::Text("<- Input");
+    ed::EndPin();
+    
+    ImGui::SameLine();
+    
+    // Output pin
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Output ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    ImGui::PopID();
+}
+
+// ============================================================================
 // BandpassFilterNode Implementation
 // ============================================================================
 
@@ -2619,6 +2749,19 @@ ReverbNode* AudioNodeGraph::CreateReverbNode() {
     return node_ptr;
 }
 
+PitchShifterNode* AudioNodeGraph::CreatePitchShifterNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<PitchShifterNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 1000 + 500, node_id);  // Input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created pitch shifter node: " << node_id;
+    return node_ptr;
+}
+
 PlayerNode* AudioNodeGraph::CreatePlayerNode() {
     // Only allow one player node
     if (player_node_) {
@@ -2882,6 +3025,9 @@ void AudioNodeGraph::Draw() {
         }
         if (ImGui::MenuItem("Reverb")) {
             CreateReverbNode();
+        }
+        if (ImGui::MenuItem("Pitch Shifter")) {
+            CreatePitchShifterNode();
         }
         if (ImGui::MenuItem("Sum Node")) {
             CreateSumNode();

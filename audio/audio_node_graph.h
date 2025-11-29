@@ -39,7 +39,8 @@ enum class NodeType {
     kNormalizer,
     kAmplitudeModulator,
     kScaler,
-    kReverb
+    kReverb,
+    kPitchShifter
 };
 
 // Base class for all audio nodes
@@ -350,6 +351,32 @@ private:
     int last_sample_rate_;
 };
 
+// Pitch Shifter node: Shifts pitch using delay-line granulation
+class PitchShifterNode : public AudioNode {
+public:
+    PitchShifterNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
+private:
+    int input_pin_id_;
+    AudioNode* input_;
+    float semitones_;
+    
+    // Delay line state
+    std::vector<float> delay_buffer_;
+    int write_index_;
+    double phasor_;
+    static constexpr int kBufferSize = 48000; // 1 second buffer
+    static constexpr float kWindowSize = 0.05f; // 50ms window
+    
+    float ReadBuffer(double index);
+};
+
 // Sum node: Adds the output of one or more input nodes
 class SumNode : public AudioNode {
 public:
@@ -457,6 +484,7 @@ public:
     AmplitudeModulatorNode* CreateAmplitudeModulatorNode();
     ScalerNode* CreateScalerNode();
     ReverbNode* CreateReverbNode();
+    PitchShifterNode* CreatePitchShifterNode();
     
     // Node management
     void DeleteNode(int node_id);
