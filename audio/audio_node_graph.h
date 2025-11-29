@@ -102,9 +102,15 @@ private:
     WaveformType last_waveform_type_;
     bool parameters_changed_;
     audio_loop::BufferConfig buffer_config_;
-    double phase_; // Phase accumulator for all waveform types
+    std::vector<double> phases_; // Phase accumulators for each frequency
     int num_harmonics_; // Number of harmonics for string resonator
     float smoothing_time_; // Smoothing time in milliseconds for smoothed square wave
+    
+    // Multi-frequency support
+    float frequency_end_;
+    int frequency_count_;
+    float last_frequency_end_;
+    int last_frequency_count_;
     
     std::vector<float> GenerateSine(int num_samples, int sample_rate);
     std::vector<float> GenerateSawtooth(int num_samples, int sample_rate);
