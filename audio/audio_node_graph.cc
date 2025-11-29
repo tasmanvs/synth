@@ -37,11 +37,25 @@ SourceNode::SourceNode(int node_id)
     , frequency_end_(440.0f)
     , frequency_count_(1)
     , last_frequency_end_(440.0f)
-    , last_frequency_count_(1) {
+    , last_frequency_count_(1)
+    , input_pin_id_(node_id * 100 + 2)
+    , input_(nullptr) {
     buffer_config_.frequency_hz = frequency_;
     buffer_config_.amplitude = volume_;
     buffer_config_.sample_rate = 48000;
     buffer_config_.frame_count = 512;
+}
+
+bool SourceNode::AddInput(AudioNode* input_node, int pin_id) {
+    if (pin_id != input_pin_id_) return false;
+    input_ = input_node;
+    return true;
+}
+
+void SourceNode::RemoveInput(AudioNode* input_node, int pin_id) {
+    if (input_ == input_node && pin_id == input_pin_id_) {
+        input_ = nullptr;
+    }
 }
 
 std::vector<float> SourceNode::GenerateAudio(int num_samples, int sample_rate) {
@@ -69,6 +83,11 @@ std::vector<float> SourceNode::GenerateSine(int num_samples, int sample_rate) {
     std::vector<float> output(num_samples, 0.0f);
     const double pi = 3.14159265358979323846;
     
+    std::vector<float> freq_input;
+    if (input_) {
+        freq_input = input_->GenerateAudio(num_samples, sample_rate);
+    }
+
     // Ensure phases vector matches frequency count
     if (static_cast<int>(phases_.size()) != frequency_count_) {
         phases_.resize(frequency_count_, 0.0);
@@ -76,22 +95,33 @@ std::vector<float> SourceNode::GenerateSine(int num_samples, int sample_rate) {
     
     // Generate each frequency
     for (int freq_idx = 0; freq_idx < frequency_count_; ++freq_idx) {
-        float freq;
-        if (frequency_count_ == 1) {
-            freq = frequency_;
-        } else {
-            // Linear interpolation from frequency_ to frequency_end_
-            float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
-            freq = frequency_ + t * (frequency_end_ - frequency_);
-        }
-        
-        double phase_increment = 2.0 * pi * freq / sample_rate;
         double& phase = phases_[freq_idx];
         
         // Amplitude is divided by count to avoid clipping
         float amplitude = volume_ / std::sqrt(static_cast<float>(frequency_count_));
         
         for (int i = 0; i < num_samples; ++i) {
+            float freq;
+            if (!freq_input.empty()) {
+                float base_freq = freq_input[i];
+                if (frequency_count_ == 1) {
+                    freq = base_freq;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    float spread = frequency_end_ - frequency_;
+                    freq = base_freq + t * spread;
+                }
+            } else {
+                if (frequency_count_ == 1) {
+                    freq = frequency_;
+                } else {
+                    // Linear interpolation from frequency_ to frequency_end_
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    freq = frequency_ + t * (frequency_end_ - frequency_);
+                }
+            }
+
+            double phase_increment = 2.0 * pi * freq / sample_rate;
             output[i] += amplitude * std::sin(phase);
             phase += phase_increment;
             
@@ -109,6 +139,11 @@ std::vector<float> SourceNode::GenerateSawtooth(int num_samples, int sample_rate
     std::vector<float> output(num_samples, 0.0f);
     const double pi = 3.14159265358979323846;
     
+    std::vector<float> freq_input;
+    if (input_) {
+        freq_input = input_->GenerateAudio(num_samples, sample_rate);
+    }
+
     // Ensure phases vector matches frequency count
     if (static_cast<int>(phases_.size()) != frequency_count_) {
         phases_.resize(frequency_count_, 0.0);
@@ -116,19 +151,31 @@ std::vector<float> SourceNode::GenerateSawtooth(int num_samples, int sample_rate
     
     // Generate each frequency
     for (int freq_idx = 0; freq_idx < frequency_count_; ++freq_idx) {
-        float freq;
-        if (frequency_count_ == 1) {
-            freq = frequency_;
-        } else {
-            float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
-            freq = frequency_ + t * (frequency_end_ - frequency_);
-        }
-        
-        double phase_increment = 2.0 * pi * freq / sample_rate;
         double& phase = phases_[freq_idx];
         float amplitude = volume_ / std::sqrt(static_cast<float>(frequency_count_));
         
         for (int i = 0; i < num_samples; ++i) {
+            float freq;
+            if (!freq_input.empty()) {
+                float base_freq = freq_input[i];
+                if (frequency_count_ == 1) {
+                    freq = base_freq;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    float spread = frequency_end_ - frequency_;
+                    freq = base_freq + t * spread;
+                }
+            } else {
+                if (frequency_count_ == 1) {
+                    freq = frequency_;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    freq = frequency_ + t * (frequency_end_ - frequency_);
+                }
+            }
+
+            double phase_increment = 2.0 * pi * freq / sample_rate;
+            
             // Sawtooth: ramps from -1 to 1 linearly
             double normalized_phase = phase / (2.0 * pi);
             output[i] += amplitude * (2.0f * normalized_phase - 1.0f);
@@ -148,6 +195,11 @@ std::vector<float> SourceNode::GenerateSquare(int num_samples, int sample_rate) 
     std::vector<float> output(num_samples, 0.0f);
     const double pi = 3.14159265358979323846;
     
+    std::vector<float> freq_input;
+    if (input_) {
+        freq_input = input_->GenerateAudio(num_samples, sample_rate);
+    }
+
     // Ensure phases vector matches frequency count
     if (static_cast<int>(phases_.size()) != frequency_count_) {
         phases_.resize(frequency_count_, 0.0);
@@ -155,19 +207,31 @@ std::vector<float> SourceNode::GenerateSquare(int num_samples, int sample_rate) 
     
     // Generate each frequency
     for (int freq_idx = 0; freq_idx < frequency_count_; ++freq_idx) {
-        float freq;
-        if (frequency_count_ == 1) {
-            freq = frequency_;
-        } else {
-            float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
-            freq = frequency_ + t * (frequency_end_ - frequency_);
-        }
-        
-        double phase_increment = 2.0 * pi * freq / sample_rate;
         double& phase = phases_[freq_idx];
         float amplitude = volume_ / std::sqrt(static_cast<float>(frequency_count_));
         
         for (int i = 0; i < num_samples; ++i) {
+            float freq;
+            if (!freq_input.empty()) {
+                float base_freq = freq_input[i];
+                if (frequency_count_ == 1) {
+                    freq = base_freq;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    float spread = frequency_end_ - frequency_;
+                    freq = base_freq + t * spread;
+                }
+            } else {
+                if (frequency_count_ == 1) {
+                    freq = frequency_;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    freq = frequency_ + t * (frequency_end_ - frequency_);
+                }
+            }
+
+            double phase_increment = 2.0 * pi * freq / sample_rate;
+            
             // Square: +1 or -1 depending on which half of cycle
             output[i] += amplitude * (phase < pi ? 1.0f : -1.0f);
             phase += phase_increment;
@@ -186,6 +250,11 @@ std::vector<float> SourceNode::GenerateSmoothedSquare(int num_samples, int sampl
     std::vector<float> output(num_samples, 0.0f);
     const double pi = 3.14159265358979323846;
     
+    std::vector<float> freq_input;
+    if (input_) {
+        freq_input = input_->GenerateAudio(num_samples, sample_rate);
+    }
+
     // Ensure phases vector matches frequency count
     if (static_cast<int>(phases_.size()) != frequency_count_) {
         phases_.resize(frequency_count_, 0.0);
@@ -193,26 +262,37 @@ std::vector<float> SourceNode::GenerateSmoothedSquare(int num_samples, int sampl
     
     // Generate each frequency
     for (int freq_idx = 0; freq_idx < frequency_count_; ++freq_idx) {
-        float freq;
-        if (frequency_count_ == 1) {
-            freq = frequency_;
-        } else {
-            float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
-            freq = frequency_ + t * (frequency_end_ - frequency_);
-        }
-        
-        double phase_increment = 2.0 * pi * freq / sample_rate;
-        
         double& phase = phases_[freq_idx];
         float amplitude = volume_ / std::sqrt(static_cast<float>(frequency_count_));
         
-        // Calculate smoothing duration in radians  
-        float smoothing_samples = (smoothing_time_ / 1000.0f) * sample_rate;
-        smoothing_samples = std::max(2.0f, smoothing_samples);
-        double smoothing_phase = smoothing_samples * phase_increment;
-        smoothing_phase = std::min(smoothing_phase, pi * 0.48); // Max 48% of half-period
-        
         for (int i = 0; i < num_samples; ++i) {
+            float freq;
+            if (!freq_input.empty()) {
+                float base_freq = freq_input[i];
+                if (frequency_count_ == 1) {
+                    freq = base_freq;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    float spread = frequency_end_ - frequency_;
+                    freq = base_freq + t * spread;
+                }
+            } else {
+                if (frequency_count_ == 1) {
+                    freq = frequency_;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    freq = frequency_ + t * (frequency_end_ - frequency_);
+                }
+            }
+
+            double phase_increment = 2.0 * pi * freq / sample_rate;
+            
+            // Calculate smoothing duration in radians  
+            float smoothing_samples = (smoothing_time_ / 1000.0f) * sample_rate;
+            smoothing_samples = std::max(2.0f, smoothing_samples);
+            double smoothing_phase = smoothing_samples * phase_increment;
+            smoothing_phase = std::min(smoothing_phase, pi * 0.48); // Max 48% of half-period
+            
             // Normalize phase to [0, 2*pi)
             double norm_phase = std::fmod(phase, 2.0 * pi);
             if (norm_phase < 0) norm_phase += 2.0 * pi;
@@ -275,29 +355,50 @@ std::vector<float> SourceNode::GenerateStringResonator(int num_samples, int samp
     if (static_cast<int>(phases_.size()) != frequency_count_) {
         phases_.resize(frequency_count_, 0.0);
     }
+
+    std::vector<float> freq_input;
+    if (input_) {
+        freq_input = input_->GenerateAudio(num_samples, sample_rate);
+    }
     
     // Generate each base frequency
     for (int freq_idx = 0; freq_idx < frequency_count_; ++freq_idx) {
-        float base_freq;
-        if (frequency_count_ == 1) {
-            base_freq = frequency_;
-        } else {
-            float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
-            base_freq = frequency_ + t * (frequency_end_ - frequency_);
+        // Pre-calculate base frequencies for this block
+        std::vector<float> base_freqs(num_samples);
+        for (int i = 0; i < num_samples; ++i) {
+            if (!freq_input.empty()) {
+                float input_freq = freq_input[i];
+                if (frequency_count_ == 1) {
+                    base_freqs[i] = input_freq;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    float spread = frequency_end_ - frequency_;
+                    base_freqs[i] = input_freq + t * spread;
+                }
+            } else {
+                if (frequency_count_ == 1) {
+                    base_freqs[i] = frequency_;
+                } else {
+                    float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                    base_freqs[i] = frequency_ + t * (frequency_end_ - frequency_);
+                }
+            }
         }
-        
+
         double& phase = phases_[freq_idx];
         
         // Generate harmonics at f, f/2, f/3, f/4, etc.
         for (int harmonic = 1; harmonic <= num_harmonics_; ++harmonic) {
-            double harmonic_freq = base_freq / static_cast<double>(harmonic);
-            double phase_increment = 2.0 * pi * harmonic_freq / sample_rate;
-            double harmonic_phase = phase;
-            
             // Amplitude decreases with higher harmonics (1/n falloff)
             float harmonic_amplitude = volume_ / (static_cast<float>(harmonic) * std::sqrt(static_cast<float>(frequency_count_)));
             
+            // Start harmonic phase from fundamental phase (sync at block start)
+            double harmonic_phase = phase;
+            
             for (int i = 0; i < num_samples; ++i) {
+                double harmonic_freq = base_freqs[i] / static_cast<double>(harmonic);
+                double phase_increment = 2.0 * pi * harmonic_freq / sample_rate;
+                
                 output[i] += harmonic_amplitude * std::sin(harmonic_phase);
                 harmonic_phase += phase_increment;
                 
@@ -308,11 +409,13 @@ std::vector<float> SourceNode::GenerateStringResonator(int num_samples, int samp
             }
         }
         
-        // Update phase for next call
-        double phase_increment = 2.0 * pi * base_freq / sample_rate;
-        phase += phase_increment * num_samples;
-        while (phase >= 2.0 * pi) {
-            phase -= 2.0 * pi;
+        // Update fundamental phase for next call
+        for (int i = 0; i < num_samples; ++i) {
+            double phase_increment = 2.0 * pi * base_freqs[i] / sample_rate;
+            phase += phase_increment;
+            if (phase >= 2.0 * pi) {
+                phase -= 2.0 * pi;
+            }
         }
     }
     
@@ -332,6 +435,12 @@ void SourceNode::Draw() {
     ed::BeginNode(node_id_);
     
     ImGui::Text("Source Node %d", node_id_);
+    
+    // Input pin for frequency modulation
+    ed::BeginPin(input_pin_id_, ed::PinKind::Input);
+    ImGui::Text("-> Freq");
+    ed::EndPin();
+
     ImGui::PushItemWidth(120.0f);
     
     // Waveform type selector
@@ -410,6 +519,42 @@ bool SourceNode::HasParametersChanged() {
         return true;
     }
     return parameters_changed_;
+}
+
+// ============================================================================
+// FrequencySourceNode Implementation
+// ============================================================================
+
+FrequencySourceNode::FrequencySourceNode(int node_id)
+    : AudioNode(node_id, NodeType::kFrequencySource)
+    , frequency_(440.0f) {
+}
+
+std::vector<float> FrequencySourceNode::GenerateAudio(int num_samples, int sample_rate) {
+    // Output constant frequency value
+    return std::vector<float>(num_samples, frequency_);
+}
+
+void FrequencySourceNode::Draw() {
+    namespace ed = ax::NodeEditor;
+    ImGui::PushID(node_id_);
+    
+    ed::BeginNode(node_id_);
+    
+    ImGui::Text("Frequency Source %d", node_id_);
+    ImGui::PushItemWidth(120.0f);
+    
+    ImGui::SliderFloat("Freq", &frequency_, 0.1f, 2000.0f, "%.1f Hz");
+    
+    ImGui::PopItemWidth();
+    
+    // Output pin
+    ed::BeginPin(output_pin_id_, ed::PinKind::Output);
+    ImGui::Text("Out ->");
+    ed::EndPin();
+    
+    ed::EndNode();
+    ImGui::PopID();
 }
 
 // ============================================================================
@@ -2608,6 +2753,7 @@ SourceNode* AudioNodeGraph::CreateSourceNode() {
     auto node = std::make_unique<SourceNode>(node_id);
     auto* node_ptr = node.get();
     RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 100 + 2, node_id); // Input pin
     
     nodes_[node_id] = std::move(node);
     
@@ -2759,6 +2905,18 @@ PitchShifterNode* AudioNodeGraph::CreatePitchShifterNode() {
     nodes_[node_id] = std::move(node);
     
     LOG(INFO) << "Created pitch shifter node: " << node_id;
+    return node_ptr;
+}
+
+FrequencySourceNode* AudioNodeGraph::CreateFrequencySourceNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<FrequencySourceNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created frequency source node: " << node_id;
     return node_ptr;
 }
 
@@ -3028,6 +3186,9 @@ void AudioNodeGraph::Draw() {
         }
         if (ImGui::MenuItem("Pitch Shifter")) {
             CreatePitchShifterNode();
+        }
+        if (ImGui::MenuItem("Frequency Source")) {
+            CreateFrequencySourceNode();
         }
         if (ImGui::MenuItem("Sum Node")) {
             CreateSumNode();

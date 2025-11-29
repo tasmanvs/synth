@@ -40,7 +40,8 @@ enum class NodeType {
     kAmplitudeModulator,
     kScaler,
     kReverb,
-    kPitchShifter
+    kPitchShifter,
+    kFrequencySource
 };
 
 // Base class for all audio nodes
@@ -87,6 +88,9 @@ public:
     std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
     void Draw() override;
     
+    bool AddInput(AudioNode* input_node, int pin_id = -1) override;
+    void RemoveInput(AudioNode* input_node, int pin_id = -1) override;
+    
     float GetFrequency() const { return frequency_; }
     float GetVolume() const { return volume_; }
     
@@ -113,11 +117,26 @@ private:
     float last_frequency_end_;
     int last_frequency_count_;
     
+    int input_pin_id_;
+    AudioNode* input_;
+    
     std::vector<float> GenerateSine(int num_samples, int sample_rate);
     std::vector<float> GenerateSawtooth(int num_samples, int sample_rate);
     std::vector<float> GenerateSquare(int num_samples, int sample_rate);
     std::vector<float> GenerateSmoothedSquare(int num_samples, int sample_rate);
     std::vector<float> GenerateStringResonator(int num_samples, int sample_rate);
+};
+
+// Frequency Source node: Generates a constant frequency value
+class FrequencySourceNode : public AudioNode {
+public:
+    FrequencySourceNode(int node_id);
+    
+    std::vector<float> GenerateAudio(int num_samples, int sample_rate) override;
+    void Draw() override;
+    
+private:
+    float frequency_;
 };
 
 // Harmonic node: Generates a base frequency plus integer multiples (harmonics)
@@ -485,6 +504,7 @@ public:
     ScalerNode* CreateScalerNode();
     ReverbNode* CreateReverbNode();
     PitchShifterNode* CreatePitchShifterNode();
+    FrequencySourceNode* CreateFrequencySourceNode();
     
     // Node management
     void DeleteNode(int node_id);
