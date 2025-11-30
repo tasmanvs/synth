@@ -203,6 +203,18 @@ FrequencySourceNode* AudioNodeGraph::CreateFrequencySourceNode() {
     return node_ptr;
 }
 
+KeyboardFrequencyNode* AudioNodeGraph::CreateKeyboardFrequencyNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<KeyboardFrequencyNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created keyboard frequency node: " << node_id;
+    return node_ptr;
+}
+
 PlayerNode* AudioNodeGraph::CreatePlayerNode() {
     // Only allow one player node
     if (player_node_) {
@@ -497,6 +509,9 @@ void AudioNodeGraph::Draw() {
         }
         if (ImGui::MenuItem("Frequency Source")) {
             CreateFrequencySourceNode();
+        }
+        if (ImGui::MenuItem("Keyboard Frequency")) {
+            CreateKeyboardFrequencyNode();
         }
         if (ImGui::MenuItem("Sum Node")) {
             CreateSumNode();
