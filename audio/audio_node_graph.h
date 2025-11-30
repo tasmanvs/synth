@@ -5,6 +5,7 @@
 #include "audio/nodes/audio_node.h"
 #include "audio/nodes/source_node.h"
 #include "audio/nodes/frequency_source_node.h"
+#include "audio/nodes/frequency_offset_node.h"
 #include "audio/nodes/keyboard_frequency_node.h"
 #include "audio/nodes/harmonic_node.h"
 #include "audio/nodes/filter_nodes.h"
@@ -39,6 +40,7 @@ public:
     ReverbNode* CreateReverbNode();
     PitchShifterNode* CreatePitchShifterNode();
     FrequencySourceNode* CreateFrequencySourceNode();
+    FrequencyOffsetNode* CreateFrequencyOffsetNode();
     KeyboardFrequencyNode* CreateKeyboardFrequencyNode();
     
     // Node management

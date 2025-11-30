@@ -36,7 +36,8 @@ SourceNode* AudioNodeGraph::CreateSourceNode() {
     auto node = std::make_unique<SourceNode>(node_id);
     auto* node_ptr = node.get();
     RegisterPin(node_ptr->GetOutputPinId(), node_id);
-    RegisterPin(node_id * 100 + 2, node_id); // Input pin
+    RegisterPin(node_id * 100 + 2, node_id); // Freq Start input pin
+    RegisterPin(node_id * 100 + 3, node_id); // Freq End input pin
     
     nodes_[node_id] = std::move(node);
     
@@ -200,6 +201,19 @@ FrequencySourceNode* AudioNodeGraph::CreateFrequencySourceNode() {
     nodes_[node_id] = std::move(node);
     
     LOG(INFO) << "Created frequency source node: " << node_id;
+    return node_ptr;
+}
+
+FrequencyOffsetNode* AudioNodeGraph::CreateFrequencyOffsetNode() {
+    int node_id = next_node_id_++;
+    auto node = std::make_unique<FrequencyOffsetNode>(node_id);
+    auto* node_ptr = node.get();
+    RegisterPin(node_ptr->GetOutputPinId(), node_id);
+    RegisterPin(node_id * 100 + 2, node_id);  // Input pin
+    
+    nodes_[node_id] = std::move(node);
+    
+    LOG(INFO) << "Created frequency offset node: " << node_id;
     return node_ptr;
 }
 
@@ -498,7 +512,7 @@ void AudioNodeGraph::Draw() {
         if (ImGui::MenuItem("Amplitude Modulator")) {
             CreateAmplitudeModulatorNode();
         }
-        if (ImGui::MenuItem("Scaler")) {
+        if (ImGui::MenuItem("Amplitude Scale")) {
             CreateScalerNode();
         }
         if (ImGui::MenuItem("Reverb")) {
@@ -509,6 +523,9 @@ void AudioNodeGraph::Draw() {
         }
         if (ImGui::MenuItem("Frequency Source")) {
             CreateFrequencySourceNode();
+        }
+        if (ImGui::MenuItem("Frequency Offset")) {
+            CreateFrequencyOffsetNode();
         }
         if (ImGui::MenuItem("Keyboard Frequency")) {
             CreateKeyboardFrequencyNode();

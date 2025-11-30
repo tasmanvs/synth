@@ -20,7 +20,8 @@ enum class NodeType {
     kReverb,
     kPitchShifter,
     kFrequencySource,
-    kKeyboardFrequency
+    kKeyboardFrequency,
+    kFrequencyOffset
 };
 
 // Base class for all audio nodes

@@ -52,8 +52,10 @@ private:
     float last_frequency_end_;
     int last_frequency_count_;
     
-    int input_pin_id_;
-    AudioNode* input_;
+    int input_pin_id_start_;
+    int input_pin_id_end_;
+    AudioNode* input_start_;
+    AudioNode* input_end_;
     
     std::vector<float> GenerateSine(int num_samples, int sample_rate);
     std::vector<float> GenerateSawtooth(int num_samples, int sample_rate);

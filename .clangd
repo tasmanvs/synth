@@ -1,19 +1,16 @@
 CompileFlags:
   Add:
-    - -Ibazel-bazel_testing/external/imgui~
-    - -Ibazel-bazel_testing/external/imgui_docking~
-    - -Ibazel-bazel_testing/external/implot~
-    - -Ibazel-bazel_testing/external/abseil-cpp~
-    - -Ibazel-bazel_testing/external/pocketfft~
-    - -Iexternal/imgui~
-    - -Iexternal/imgui_docking~
-    - -Iexternal/implot~
-    - -Iexternal/abseil-cpp~
-    - -Iexternal/pocketfft~
-    - -Inode_editor
     - -I.
-    - -Ibazel-bin
+    - -Ibazel-synth
+    - -Ibazel-synth/external/imgui~
+    - -Ibazel-synth/external/imgui_docking~
+    - -Ibazel-synth/external/implot~
+    - -Ibazel-synth/external/abseil-cpp~
+    - -Ibazel-synth/external/pocketfft~
+    - -Ibazel-synth/external/emsdk~
+    - -Inode_editor
     - -xc++
     - -std=c++17
   Remove:
     - -fno-canonical-system-headers
+    - -Wno-*

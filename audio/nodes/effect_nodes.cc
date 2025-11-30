@@ -371,7 +371,7 @@ void ScalerNode::Draw() {
     
     ed::BeginNode(node_id_);
     
-    ImGui::Text("Scaler %d", node_id_);
+    ImGui::Text("Amplitude Scale %d", node_id_);
     ImGui::PushItemWidth(140.0f);
     
     ImGui::Text("Output Range:");
@@ -696,7 +696,7 @@ void PitchShifterNode::Draw() {
     ImGui::PushItemWidth(140.0f);
     
     // Instead, step by 1 unit
-    ImGui::SliderFloat("Semitones", &semitones_, -12.0f, 12.0f, "%1.f");
+    ImGui::SliderFloat("Semitones", &semitones_, -12.0f, 12.0f, "%.001f");
 
     ImGui::PopItemWidth();
     
