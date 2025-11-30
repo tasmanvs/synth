@@ -69,11 +69,34 @@ void KeyboardFrequencyNode::Draw() {
     ImGui::Text("Octave: %s (x%.0f)", octave_names[current_octave_], GetOctaveMultiplier());
     
     if (current_note_ >= 0) {
-        ImGui::Text("Note: %s (%d/%d)", note_names[current_note_], current_note_, num_subdivisions_);
+        ImGui::Text("Note: %s (%d/%d)", note_names[current_note_], current_note_ + 1, num_subdivisions_);
         ImGui::Text("Freq: %.1f Hz", GetCurrentFrequency());
     } else {
         ImGui::Text("Note: None");
         ImGui::Text("Freq: 0.0 Hz");
+    }
+    
+    ImGui::Separator();
+    
+    // Visual keyboard representation
+    const char* key_labels[] = {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]"};
+    ImGui::Text("Keys:");
+    for (int i = 0; i < num_subdivisions_; i++) {
+        if (i > 0) ImGui::SameLine();
+        
+        // Highlight the currently pressed key
+        if (i == current_note_) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.7f, 0.3f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.6f, 0.2f, 1.0f));
+        } else {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.3f, 0.3f, 0.3f, 1.0f));
+        }
+        
+        ImGui::Button(key_labels[i], ImVec2(20, 20));
+        ImGui::PopStyleColor(3);
     }
     
     ImGui::Separator();
