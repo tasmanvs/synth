@@ -1,7 +1,11 @@
 cc_binary(
-    name = "imgui_webgl_bin",
+    name = "imgui_webgl_bin.html",
     srcs = ["imgui_webgl.cc"],
-    additional_linker_inputs = ["//:shell.html"],
+    additional_linker_inputs = [
+        "//:shell.html",
+        "//audio:audio_pre.js",
+        "//audio:audio.js",
+    ],
     deps = [
         "@imgui//:imgui",
         "//:imgui_glfw_opengl3_emscripten",
@@ -11,8 +15,6 @@ cc_binary(
         "@abseil-cpp//absl/log:initialize",
     ],
     linkopts = [
-        "-o",
-        "imgui_webgl_bin.html",
         "-sUSE_GLFW=3",
         "-sUSE_WEBGL2=1",
         "-sALLOW_MEMORY_GROWTH=1",
@@ -33,25 +35,35 @@ cc_binary(
         # Include JavaScript library for Web Audio
         "--js-library=$(location //audio:audio.js)",
     ],
-    data = [
-        "//:shell.html",
-        "//audio:audio_pre.js",
-        "//audio:audio.js",
-    ],
     visibility = ["//visibility:public"],
     target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
-# Copy the HTML file to the output directory (with two names for convenience)
+# Alias for easier reference
+alias(
+    name = "imgui_webgl_bin",
+    actual = ":imgui_webgl_bin.html",
+    visibility = ["//visibility:public"],
+)
+
+# Extract the emscripten output tar archive and copy HTML
 genrule(
     name = "imgui_webgl_html",
-    srcs = ["imgui_webgl.html"],
+    srcs = [
+        ":imgui_webgl_bin.html",
+        "imgui_webgl.html",
+    ],
     outs = [
-        "imgui_webgl_generated.html",
+        "imgui_webgl_bin.js",
+        "imgui_webgl_bin.wasm",
         "imgui_webgl_index.html",
     ],
-    cmd = "cp $< $(location imgui_webgl_generated.html) && cp $< $(location imgui_webgl_index.html)",
+    cmd = """
+        tar -xf $(location :imgui_webgl_bin.html) -C $$(dirname $(location imgui_webgl_bin.js))
+        cp $(location imgui_webgl.html) $(location imgui_webgl_index.html)
+    """,
     visibility = ["//visibility:public"],
+    target_compatible_with = ["@platforms//cpu:wasm32"],
 )
 
 # Create a filegroup that includes the generated files
