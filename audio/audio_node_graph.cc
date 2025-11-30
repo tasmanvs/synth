@@ -421,7 +421,32 @@ void AudioNodeGraph::Draw() {
     }
     ed::EndCreate();
     
-    // Handle link deletion
+    // Handle deletion with Backspace key (for macOS) or Delete key
+    // Note: ed::BeginDelete() handles Delete key, but we add Backspace support for macOS
+    if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
+        int object_count = ed::GetSelectedObjectCount();
+        if (object_count > 0) {
+            // Get selected nodes
+            std::vector<ed::NodeId> selected_nodes(object_count);
+            int node_count = ed::GetSelectedNodes(selected_nodes.data(), object_count);
+            
+            // Get selected links
+            std::vector<ed::LinkId> selected_links(object_count);
+            int link_count = ed::GetSelectedLinks(selected_links.data(), object_count);
+            
+            // Delete selected links first
+            for (int i = 0; i < link_count; ++i) {
+                DeleteLink(selected_links[i].Get());
+            }
+            
+            // Then delete selected nodes
+            for (int i = 0; i < node_count; ++i) {
+                DeleteNode(selected_nodes[i].Get());
+            }
+        }
+    }
+    
+    // Handle link deletion with Delete key (cross-platform)
     if (ed::BeginDelete()) {
         ed::LinkId deleted_link_id;
         while (ed::QueryDeletedLink(&deleted_link_id)) {
