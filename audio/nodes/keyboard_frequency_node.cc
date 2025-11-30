@@ -60,7 +60,7 @@ void KeyboardFrequencyNode::Draw() {
     ImGui::SliderFloat("Base", &base_frequency_, 0.1f, 2000.0f, "%.1f Hz");
     ImGui::SliderInt("Divisions", &num_subdivisions_, 2, 12);
     
-    ImGui::Separator();
+    ImGui::Spacing();
     
     // Display current octave, note and frequency
     const char* octave_names[] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "0"};
@@ -76,7 +76,7 @@ void KeyboardFrequencyNode::Draw() {
         ImGui::Text("Freq: 0.0 Hz");
     }
     
-    ImGui::Separator();
+    ImGui::Spacing();
     
     // Visual keyboard representation
     const char* key_labels[] = {"Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "[", "]"};
@@ -99,7 +99,7 @@ void KeyboardFrequencyNode::Draw() {
         ImGui::PopStyleColor(3);
     }
     
-    ImGui::Separator();
+    ImGui::Spacing();
     
     // Handle octave selection (sticky - keys 1-0)
     if (ImGui::IsKeyPressed(ImGuiKey_1)) current_octave_ = 0;

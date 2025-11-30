@@ -38,12 +38,18 @@ PlayerNode::PlayerNode(int node_id, AudioInterface* audio_interface)
     , sample_rate_(48000)
     , spectrogram_sample_counter_(0)
     , frequency_axis_min_(0.0)
-    , frequency_axis_max_(24000.0) {
+    , frequency_axis_max_(24000.0)
+    , timeseries_buffer_()
+    , timeseries_buffer_ms_(2.0f) {
     // Initialize Hann window for FFT
     fft_window_.resize(fft_size_);
     for (int i = 0; i < fft_size_; ++i) {
         fft_window_[i] = 0.5f * (1.0f - std::cos(2.0f * 3.14159265359f * i / (fft_size_ - 1)));
     }
+    
+    // Initialize timeseries buffer (2ms at 48kHz = 96 samples)
+    int buffer_samples = static_cast<int>((timeseries_buffer_ms_ / 1000.0f) * sample_rate_);
+    timeseries_buffer_.resize(buffer_samples, 0.0f);
 }
 
 std::vector<float> PlayerNode::GenerateAudio(int num_samples, int sample_rate) {
@@ -66,7 +72,7 @@ void PlayerNode::Draw() {
     ImGui::Text("-> In");
     ed::EndPin();
     
-    ImGui::Separator();
+    ImGui::Spacing();
     
     if (ImGui::Button(playing_ ? "Stop" : "Play")) {
         SetPlaying(!playing_);
@@ -399,6 +405,17 @@ void PlayerNode::ComputeFFT(const float* input, int size, std::vector<float>& ma
 }
 
 void PlayerNode::UpdateSpectrogram(const std::vector<float>& samples) {
+    // Update timeseries buffer (rolling buffer for most recent samples)
+    int buffer_samples = static_cast<int>((timeseries_buffer_ms_ / 1000.0f) * sample_rate_);
+    if (timeseries_buffer_.size() != buffer_samples) {
+        timeseries_buffer_.resize(buffer_samples, 0.0f);
+    }
+    
+    for (float sample : samples) {
+        timeseries_buffer_.erase(timeseries_buffer_.begin());
+        timeseries_buffer_.push_back(sample);
+    }
+    
     // Accumulate samples into FFT input buffer
     for (float sample : samples) {
         fft_input_buffer_.erase(fft_input_buffer_.begin());
@@ -454,6 +471,11 @@ void PlayerNode::DrawSpectrogramContent() {
         spectrogram_time_slices_ = static_cast<size_t>(time_slices_int);
     }
     
+    if (ImGui::SliderFloat("Timeseries Buffer (ms)", &timeseries_buffer_ms_, 0.5f, 100.0f)) {
+        int buffer_samples = static_cast<int>((timeseries_buffer_ms_ / 1000.0f) * sample_rate_);
+        timeseries_buffer_.resize(buffer_samples, 0.0f);
+    }
+    
     if (ImGui::Button("Reset FFT Size")) {
         fft_input_buffer_.resize(fft_size_, 0.0f);
         fft_window_.resize(fft_size_);
@@ -495,9 +517,11 @@ void PlayerNode::DrawSpectrogramContent() {
         frequency_axis_max_ = static_cast<double>(max_frequency);
     }
     
-    // Use subplots: Spectrogram on left, PSD on right
-    if (ImPlot::BeginSubplots("Spectrum Analysis", 1, 2, ImVec2(-1, -1))) {
-        // Left subplot: Spectrogram (Time vs Frequency)
+    // Use subplots: Spectrogram (40%) | PSD (40%) | Waveform (20%)
+    if (ImPlot::BeginSubplots("Spectrum Analysis", 1, 3, ImVec2(-1, -1), 
+                               ImPlotSubplotFlags_None, nullptr, 
+                               (float[]){0.4f, 0.4f, 0.2f})) {
+        // Left: Spectrogram (Time vs Frequency)
         // Link Y-axis (frequency) to shared variables BEFORE BeginPlot
         ImPlot::SetNextAxisLinks(ImAxis_Y1, &frequency_axis_min_, &frequency_axis_max_);
         
@@ -525,7 +549,7 @@ void PlayerNode::DrawSpectrogramContent() {
             ImPlot::EndPlot();
         }
         
-        // Right subplot: Power Spectral Density (Frequency vs Magnitude)
+        // Middle: Power Spectral Density (Frequency vs Magnitude)
         // Link X-axis (frequency) to shared variables BEFORE BeginPlot
         ImPlot::SetNextAxisLinks(ImAxis_X1, &frequency_axis_min_, &frequency_axis_max_);
         
@@ -554,6 +578,36 @@ void PlayerNode::DrawSpectrogramContent() {
                 }
                 
                 ImPlot::PlotLine("PSD", frequencies.data(), magnitudes.data(), num_bins);
+            }
+            
+            ImPlot::EndPlot();
+        }
+        
+        // Right: Waveform (Time vs Amplitude)
+        if (ImPlot::BeginPlot("Waveform")) {
+            ImPlot::SetupAxes("Time (ms)", "Amplitude");
+            
+            float time_window = timeseries_buffer_ms_;
+            ImPlot::SetupAxesLimits(0, static_cast<double>(time_window),
+                                   -1.1, 1.1,
+                                   ImPlotCond_Always);
+            
+            if (!timeseries_buffer_.empty()) {
+                int num_samples = static_cast<int>(timeseries_buffer_.size());
+                
+                // Create time axis in milliseconds
+                std::vector<double> time_axis(num_samples);
+                for (int i = 0; i < num_samples; ++i) {
+                    time_axis[i] = (static_cast<double>(i) / num_samples) * time_window;
+                }
+                
+                // Convert to double for plotting
+                std::vector<double> amplitude(num_samples);
+                for (int i = 0; i < num_samples; ++i) {
+                    amplitude[i] = static_cast<double>(timeseries_buffer_[i]);
+                }
+                
+                ImPlot::PlotLine("Signal", time_axis.data(), amplitude.data(), num_samples);
             }
             
             ImPlot::EndPlot();

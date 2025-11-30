@@ -58,6 +58,8 @@ private:
     int spectrogram_sample_counter_;
     double frequency_axis_min_;
     double frequency_axis_max_;
+    std::vector<float> timeseries_buffer_;
+    float timeseries_buffer_ms_;
 
     void AppendToHistory(const std::vector<float>& samples);
     void DrawHistoryWindow();

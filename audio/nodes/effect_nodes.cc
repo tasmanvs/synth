@@ -378,7 +378,7 @@ void ScalerNode::Draw() {
     ImGui::DragFloat("Min##out", &output_min_, 0.01f, -10.0f, 10.0f, "%.2f");
     ImGui::DragFloat("Max##out", &output_max_, 0.01f, -10.0f, 10.0f, "%.2f");
     
-    ImGui::Separator();
+    ImGui::Spacing();
     
     if (ImGui::Checkbox("Auto-Detect Input", &auto_detect_range_)) {
         if (auto_detect_range_) {
