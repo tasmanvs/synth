@@ -1,4 +1,5 @@
 #include "audio/nodes/source_node.h"
+#include "audio/nodes/string_resonator.h"
 #include "imgui.h"
 #include "imgui_node_editor.h"
 #include <cmath>
@@ -389,16 +390,16 @@ std::vector<float> SourceNode::GenerateSmoothedSquare(int num_samples, int sampl
 
 std::vector<float> SourceNode::GenerateStringResonator(int num_samples, int sample_rate) {
     std::vector<float> output(num_samples, 0.0f);
-    const double pi = 3.14159265358979323846;
     
     // If volume is 0, return silence
     if (volume_ == 0.0f) {
         return output;
     }
     
-    // Ensure phases vector matches frequency count
-    if (static_cast<int>(phases_.size()) != frequency_count_) {
-        phases_.resize(frequency_count_, 0.0);
+    // Ensure phases vector matches frequency count * harmonics
+    int total_oscillators = frequency_count_ * num_harmonics_;
+    if (static_cast<int>(phases_.size()) != total_oscillators) {
+        phases_.resize(total_oscillators, 0.0);
     }
 
     std::vector<float> freq_start_input;
@@ -437,37 +438,21 @@ std::vector<float> SourceNode::GenerateStringResonator(int num_samples, int samp
             }
         }
 
-        double& phase = phases_[freq_idx];
-        
-        // Generate harmonics at f, f/2, f/3, f/4, etc.
-        for (int harmonic = 1; harmonic <= num_harmonics_; ++harmonic) {
-            // Amplitude decreases with higher harmonics (1/n falloff)
-            float harmonic_amplitude = volume_ / (static_cast<float>(harmonic) * std::sqrt(static_cast<float>(frequency_count_)));
-            
-            // Start harmonic phase from fundamental phase (sync at block start)
-            double harmonic_phase = phase;
-            
-            for (int i = 0; i < num_samples; ++i) {
-                double harmonic_freq = base_freqs[i] / static_cast<double>(harmonic);
-                double phase_increment = 2.0 * pi * harmonic_freq / sample_rate;
-                
-                output[i] += harmonic_amplitude * std::sin(harmonic_phase);
-                harmonic_phase += phase_increment;
-                
-                // Wrap phase
-                if (harmonic_phase >= 2.0 * pi) {
-                    harmonic_phase -= 2.0 * pi;
-                }
-            }
+        // Get phases for this frequency's harmonics
+        std::vector<double> harmonic_phases(num_harmonics_);
+        for (int h = 0; h < num_harmonics_; ++h) {
+            harmonic_phases[h] = phases_[freq_idx * num_harmonics_ + h];
         }
         
-        // Update fundamental phase for next call
-        for (int i = 0; i < num_samples; ++i) {
-            double phase_increment = 2.0 * pi * base_freqs[i] / sample_rate;
-            phase += phase_increment;
-            if (phase >= 2.0 * pi) {
-                phase -= 2.0 * pi;
-            }
+        // Use library function to generate string resonator
+        float volume_per_freq = volume_ / std::sqrt(static_cast<float>(frequency_count_));
+        audio_nodes::GenerateStringResonatorWithModulation(
+            base_freqs, num_harmonics_, volume_per_freq, 
+            num_samples, sample_rate, harmonic_phases, output);
+        
+        // Store updated phases
+        for (int h = 0; h < num_harmonics_; ++h) {
+            phases_[freq_idx * num_harmonics_ + h] = harmonic_phases[h];
         }
     }
     

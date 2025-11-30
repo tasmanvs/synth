@@ -29,6 +29,15 @@ public:
     float GetFrequency() const { return frequency_; }
     float GetVolume() const { return volume_; }
     
+    // Setters for testing
+    void SetWaveformType(WaveformType type) { waveform_type_ = type; }
+    void SetFrequency(float freq) { frequency_ = freq; }
+    void SetFrequencyEnd(float freq) { frequency_end_ = freq; }
+    void SetFrequencyCount(int count) { frequency_count_ = count; phases_.resize(count, 0.0); }
+    void SetEndFrequencyInclusive(bool inclusive) { end_frequency_inclusive_ = inclusive; }
+    void SetVolume(float vol) { volume_ = vol; }
+    void SetNumHarmonics(int num) { num_harmonics_ = num; }
+    
     // Check if parameters have changed since last check
     bool HasParametersChanged();
     void ResetChangeFlag() { parameters_changed_ = false; }

@@ -38,6 +38,7 @@ cc_library(
     ],
     deps = [
         ":audio_interface",
+        ":string_resonator_lib",
         "//node_editor:imgui_node_editor",
         "//audio_loop:audio_loop_lib",
         "@imgui//:imgui",
@@ -66,6 +67,19 @@ cc_test(
         "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],
+)
+
+cc_library(
+    name = "string_resonator_lib",
+    srcs = ["nodes/string_resonator.cc"],
+    hdrs = ["nodes/string_resonator.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_binary(
+    name = "string_resonator_standalone_test",
+    srcs = ["nodes/string_resonator_standalone_test.cc"],
+    deps = [":string_resonator_lib"],
 )
 
 exports_files([
