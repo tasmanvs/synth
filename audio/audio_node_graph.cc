@@ -18,6 +18,7 @@ AudioNodeGraph::AudioNodeGraph(AudioInterface* audio_interface)
     
     // Initialize node editor
     ax::NodeEditor::Config config;
+    config.EnableSmoothZoom = true;  // Enable smooth zoom for better macOS trackpad support
     editor_context_ = ax::NodeEditor::CreateEditor(&config);
     
     LOG(INFO) << "AudioNodeGraph created";
