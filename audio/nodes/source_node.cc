@@ -23,6 +23,7 @@ SourceNode::SourceNode(int node_id)
     , frequency_count_(1)
     , last_frequency_end_(440.0f)
     , last_frequency_count_(1)
+    , end_frequency_inclusive_(true)
     , input_pin_id_start_(node_id * 100 + 2)
     , input_pin_id_end_(node_id * 100 + 3)
     , input_start_(nullptr)
@@ -117,7 +118,12 @@ std::vector<float> SourceNode::GenerateSine(int num_samples, int sample_rate) {
                 freq = freq_start;
             } else {
                 // Linear interpolation from freq_start to freq_end
-                float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                float t;
+                if (end_frequency_inclusive_) {
+                    t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                } else {
+                    t = static_cast<float>(freq_idx) / frequency_count_;
+                }
                 freq = freq_start + t * (freq_end - freq_start);
             }
 
@@ -143,7 +149,7 @@ std::vector<float> SourceNode::GenerateSawtooth(int num_samples, int sample_rate
     if (volume_ == 0.0f) {
         return output;
     }
-    
+
     std::vector<float> freq_start_input;
     std::vector<float> freq_end_input;
     if (input_start_) {
@@ -177,11 +183,14 @@ std::vector<float> SourceNode::GenerateSawtooth(int num_samples, int sample_rate
                 freq = freq_start;
             } else {
                 // Linear interpolation from freq_start to freq_end
-                float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                float t;
+                if (end_frequency_inclusive_) {
+                    t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                } else {
+                    t = static_cast<float>(freq_idx) / frequency_count_;
+                }
                 freq = freq_start + t * (freq_end - freq_start);
-            }
-
-            double phase_increment = 2.0 * pi * freq / sample_rate;
+            }            double phase_increment = 2.0 * pi * freq / sample_rate;
             
             // Sawtooth: ramps from -1 to 1 linearly
             double normalized_phase = phase / (2.0 * pi);
@@ -240,7 +249,12 @@ std::vector<float> SourceNode::GenerateSquare(int num_samples, int sample_rate) 
                 freq = freq_start;
             } else {
                 // Linear interpolation from freq_start to freq_end
-                float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                float t;
+                if (end_frequency_inclusive_) {
+                    t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                } else {
+                    t = static_cast<float>(freq_idx) / frequency_count_;
+                }
                 freq = freq_start + t * (freq_end - freq_start);
             }
 
@@ -302,7 +316,12 @@ std::vector<float> SourceNode::GenerateSmoothedSquare(int num_samples, int sampl
                 freq = freq_start;
             } else {
                 // Linear interpolation from freq_start to freq_end
-                float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                float t;
+                if (end_frequency_inclusive_) {
+                    t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                } else {
+                    t = static_cast<float>(freq_idx) / frequency_count_;
+                }
                 freq = freq_start + t * (freq_end - freq_start);
             }
 
@@ -408,7 +427,12 @@ std::vector<float> SourceNode::GenerateStringResonator(int num_samples, int samp
             if (frequency_count_ == 1) {
                 base_freqs[i] = freq_start;
             } else {
-                float t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                float t;
+                if (end_frequency_inclusive_) {
+                    t = static_cast<float>(freq_idx) / (frequency_count_ - 1);
+                } else {
+                    t = static_cast<float>(freq_idx) / frequency_count_;
+                }
                 base_freqs[i] = freq_start + t * (freq_end - freq_start);
             }
         }
@@ -521,6 +545,8 @@ void SourceNode::Draw() {
     if (input_end_) {
         ImGui::EndDisabled();
     }
+    ImGui::SameLine();
+    ImGui::Checkbox("Incl", &end_frequency_inclusive_);
     if (ImGui::SliderInt("Count", &frequency_count_, 1, 64)) {
         parameters_changed_ = true;
         phases_.resize(frequency_count_, 0.0);

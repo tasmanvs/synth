@@ -51,6 +51,7 @@ private:
     int frequency_count_;
     float last_frequency_end_;
     int last_frequency_count_;
+    bool end_frequency_inclusive_;
     
     int input_pin_id_start_;
     int input_pin_id_end_;
