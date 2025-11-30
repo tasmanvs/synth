@@ -542,7 +542,7 @@ void SourceNode::Draw() {
     
     // Show harmonics slider only for string resonator
     if (waveform_type_ == WaveformType::kStringResonator) {
-        if (ImGui::SliderInt("Harmonics", &num_harmonics_, 1, 16)) {
+        if (ImGui::SliderInt("Harmonics", &num_harmonics_, 1, 64)) {
             parameters_changed_ = true;
         }
     }
