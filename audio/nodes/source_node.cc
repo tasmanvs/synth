@@ -25,6 +25,7 @@ SourceNode::SourceNode(int node_id)
     , last_frequency_end_(440.0f)
     , last_frequency_count_(1)
     , end_frequency_inclusive_(true)
+    , amplitude_falloff_(AmplitudeFalloff::kFlat)
     , input_pin_id_start_(node_id * 100 + 2)
     , input_pin_id_end_(node_id * 100 + 3)
     , input_start_(nullptr)
@@ -101,8 +102,6 @@ std::vector<float> SourceNode::GenerateSine(int num_samples, int sample_rate) {
     // Generate each frequency
     for (int freq_idx = 0; freq_idx < frequency_count_; ++freq_idx) {
         double& phase = phases_[freq_idx];
-        
-        // Amplitude is divided by count to avoid clipping
         float amplitude = volume_ / std::sqrt(static_cast<float>(frequency_count_));
         
         for (int i = 0; i < num_samples; ++i) {
@@ -191,7 +190,9 @@ std::vector<float> SourceNode::GenerateSawtooth(int num_samples, int sample_rate
                     t = static_cast<float>(freq_idx) / frequency_count_;
                 }
                 freq = freq_start + t * (freq_end - freq_start);
-            }            double phase_increment = 2.0 * pi * freq / sample_rate;
+            }
+            
+            double phase_increment = 2.0 * pi * freq / sample_rate;
             
             // Sawtooth: ramps from -1 to 1 linearly
             double normalized_phase = phase / (2.0 * pi);
@@ -448,7 +449,7 @@ std::vector<float> SourceNode::GenerateStringResonator(int num_samples, int samp
         float volume_per_freq = volume_ / std::sqrt(static_cast<float>(frequency_count_));
         audio_nodes::GenerateStringResonatorWithModulation(
             base_freqs, num_harmonics_, volume_per_freq, 
-            num_samples, sample_rate, harmonic_phases, output);
+            num_samples, sample_rate, harmonic_phases, output, amplitude_falloff_);
         
         // Store updated phases
         for (int h = 0; h < num_harmonics_; ++h) {
@@ -540,9 +541,31 @@ void SourceNode::Draw() {
         parameters_changed_ = true;
     }
     
-    // Show harmonics slider only for string resonator
+    // Show harmonics slider and amplitude falloff only for string resonator
     if (waveform_type_ == WaveformType::kStringResonator) {
         if (ImGui::SliderInt("Harmonics", &num_harmonics_, 1, 64)) {
+            parameters_changed_ = true;
+        }
+        
+        ImGui::Text("Harmonic Falloff:");
+        int current_falloff = static_cast<int>(amplitude_falloff_);
+        if (ImGui::RadioButton("Flat", &current_falloff, static_cast<int>(AmplitudeFalloff::kFlat))) {
+            amplitude_falloff_ = AmplitudeFalloff::kFlat;
+            parameters_changed_ = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Linear", &current_falloff, static_cast<int>(AmplitudeFalloff::kLinear))) {
+            amplitude_falloff_ = AmplitudeFalloff::kLinear;
+            parameters_changed_ = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("1/X", &current_falloff, static_cast<int>(AmplitudeFalloff::kOneOverX))) {
+            amplitude_falloff_ = AmplitudeFalloff::kOneOverX;
+            parameters_changed_ = true;
+        }
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Exp", &current_falloff, static_cast<int>(AmplitudeFalloff::kExponential))) {
+            amplitude_falloff_ = AmplitudeFalloff::kExponential;
             parameters_changed_ = true;
         }
     }

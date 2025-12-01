@@ -11,7 +11,8 @@ std::vector<float> GenerateStringResonator(
     float volume,
     int num_samples,
     int sample_rate,
-    std::vector<double>& phases) {
+    std::vector<double>& phases,
+    AmplitudeFalloff falloff) {
     
     std::vector<float> output(num_samples, 0.0f);
     
@@ -22,8 +23,25 @@ std::vector<float> GenerateStringResonator(
     
     // Generate harmonics at f, 2f, 3f, 4f, etc.
     for (int harmonic = 1; harmonic <= num_harmonics; ++harmonic) {
-        // Amplitude decreases with higher harmonics (1/n falloff)
-        float harmonic_amplitude = volume / static_cast<float>(harmonic);
+        // Calculate amplitude based on falloff mode
+        float harmonic_amplitude = volume;
+        switch (falloff) {
+            case AmplitudeFalloff::kFlat:
+                // All harmonics have same amplitude
+                break;
+            case AmplitudeFalloff::kLinear:
+                // Linear falloff: 1, (n-1)/n, (n-2)/n, ...
+                harmonic_amplitude *= (1.0f - static_cast<float>(harmonic - 1) / num_harmonics);
+                break;
+            case AmplitudeFalloff::kOneOverX:
+                // 1/n falloff
+                harmonic_amplitude /= static_cast<float>(harmonic);
+                break;
+            case AmplitudeFalloff::kExponential:
+                // Exponential falloff: e^(-(harmonic-1))
+                harmonic_amplitude *= std::exp(-static_cast<float>(harmonic - 1));
+                break;
+        }
         double& harmonic_phase = phases[harmonic - 1];
         
         for (int i = 0; i < num_samples; ++i) {
@@ -50,7 +68,8 @@ void GenerateStringResonatorWithModulation(
     int num_samples,
     int sample_rate,
     std::vector<double>& harmonic_phases,
-    std::vector<float>& output) {
+    std::vector<float>& output,
+    AmplitudeFalloff falloff) {
     
     // Ensure phases vector matches harmonics count
     if (static_cast<int>(harmonic_phases.size()) != num_harmonics) {
@@ -59,8 +78,25 @@ void GenerateStringResonatorWithModulation(
     
     // Generate harmonics at f, 2f, 3f, 4f, etc.
     for (int harmonic = 1; harmonic <= num_harmonics; ++harmonic) {
-        // Amplitude decreases with higher harmonics (1/n falloff)
-        float harmonic_amplitude = volume_per_freq / static_cast<float>(harmonic);
+        // Calculate amplitude based on falloff mode
+        float harmonic_amplitude = volume_per_freq;
+        switch (falloff) {
+            case AmplitudeFalloff::kFlat:
+                // All harmonics have same amplitude
+                break;
+            case AmplitudeFalloff::kLinear:
+                // Linear falloff: 1, (n-1)/n, (n-2)/n, ...
+                harmonic_amplitude *= (1.0f - static_cast<float>(harmonic - 1) / num_harmonics);
+                break;
+            case AmplitudeFalloff::kOneOverX:
+                // 1/n falloff
+                harmonic_amplitude /= static_cast<float>(harmonic);
+                break;
+            case AmplitudeFalloff::kExponential:
+                // Exponential falloff: e^(-(harmonic-1))
+                harmonic_amplitude *= std::exp(-static_cast<float>(harmonic - 1));
+                break;
+        }
         double& harmonic_phase = harmonic_phases[harmonic - 1];
         
         for (int i = 0; i < num_samples; ++i) {

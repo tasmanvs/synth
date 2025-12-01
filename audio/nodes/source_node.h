@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio/nodes/audio_node.h"
+#include "audio/nodes/string_resonator.h"
 #include "audio_loop/sine_buffer_generator.h"
 #include <vector>
 
@@ -61,6 +62,7 @@ private:
     float last_frequency_end_;
     int last_frequency_count_;
     bool end_frequency_inclusive_;
+    AmplitudeFalloff amplitude_falloff_;
     
     int input_pin_id_start_;
     int input_pin_id_end_;
