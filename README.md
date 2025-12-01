@@ -120,6 +120,21 @@ This separation keeps the UI code modular and testable.
 
 ## Development Tips
 
+### Generate Compile Commands for IDE Support
+
+To get proper IDE support (clangd, code completion, navigation), generate the `compile_commands.json` file:
+
+```bash
+bazelisk run //:refresh_compile_commands
+```
+
+This will generate a `compile_commands.json` file that IDE language servers (like clangd) can use to understand your project structure. Run this command whenever you:
+- Add new source files
+- Change dependencies
+- Modify build configurations
+
+After generating, restart your language server (in VS Code: `Cmd+Shift+P` → "clangd: Restart language server").
+
 ### Iterate Quickly
 
 ```powershell

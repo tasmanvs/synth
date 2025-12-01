@@ -28,6 +28,7 @@ archive_override(
     patches = [
         "//third_party:imgui_module.patch",
         "//third_party:imgui_build.patch",
+        "//third_party:imgui_32bit_indices.patch",
     ],
     patch_strip = 1,
 )
